@@ -1,0 +1,190 @@
+// StockFlow Platform Database Schema
+// Multi-tenant SaaS - Database-level isolation
+// Updated: 2026-02-26T23:10:00
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// Platform-level Models (shared across all tenants)
+// ============================================================
+
+/// Tenant represents a company/organization using StockFlow
+model Tenant {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String       @unique
+  dbName      String       @unique @map("db_name")
+  dbHost      String?      @map("db_host")
+  plan        TenantPlan   @default(FREE)
+  status      TenantStatus @default(ACTIVE)
+  maxUsers    Int          @default(5) @map("max_users")
+  contactName String?      @map("contact_name")
+  email       String
+  phone       String?
+  address     String?
+  logoUrl     String?      @map("logo_url")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  users      User[]
+  categories Category[]
+  brands     Brand[]
+  products   Product[]
+  skus       Sku[]
+
+  @@map("tenants")
+}
+
+enum TenantPlan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+/// Platform-level user record (auth + tenant association)
+model User {
+  id            String    @id @default(uuid())
+  email         String
+  passwordHash  String    @map("password_hash")
+  firstName     String?   @map("first_name")
+  lastName      String?   @map("last_name")
+  role          UserRole  @default(VIEWER)
+  isActive      Boolean   @default(true) @map("is_active")
+  lastLoginAt   DateTime? @map("last_login_at")
+  refreshToken  String?   @map("refresh_token")
+  tenantId      String    @map("tenant_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([email, tenantId])
+  @@index([tenantId])
+  @@map("users")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  PURCHASER
+  WAREHOUSE
+  SALES
+  VIEWER
+}
+
+// ============================================================
+// Product Management (Phase 1 - in platform DB with tenant isolation)
+// Updated: 2026-02-27T04:30:00
+// ============================================================
+
+/// Product category tree (e.g. Phone Cases → iPhone → iPhone 16 Pro Max)
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  nameEn    String?  @map("name_en")
+  code      String
+  parentId  String?  @map("parent_id")
+  tenantId  String   @map("tenant_id")
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([code, tenantId])
+  @@index([tenantId])
+  @@map("categories")
+}
+
+/// Brand (e.g. Apple, Samsung, Xiaomi)
+model Brand {
+  id        String   @id @default(uuid())
+  name      String
+  code      String
+  tenantId  String   @map("tenant_id")
+  logoUrl   String?  @map("logo_url")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([code, tenantId])
+  @@index([tenantId])
+  @@map("brands")
+}
+
+/// SPU - Standard Product Unit (e.g. iPhone 16 PM Clear Silicone Case)
+model Product {
+  id            String        @id @default(uuid())
+  name          String
+  nameEn        String?       @map("name_en")
+  description   String?
+  descriptionEn String?       @map("description_en")
+  categoryId    String        @map("category_id")
+  brandId       String?       @map("brand_id")
+  tenantId      String        @map("tenant_id")
+  status        ProductStatus @default(DRAFT)
+  images        Json?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  category Category @relation(fields: [categoryId], references: [id])
+  brand    Brand?   @relation(fields: [brandId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  skus     Sku[]
+
+  @@index([tenantId])
+  @@index([categoryId])
+  @@map("products")
+}
+
+enum ProductStatus {
+  DRAFT
+  PRE_ORDER
+  ACTIVE
+  DISCONTINUED
+}
+
+/// SKU - Stock Keeping Unit (specific variant with auto-generated code)
+model Sku {
+  id                String   @id @default(uuid())
+  code              String
+  productId         String   @map("product_id")
+  tenantId          String   @map("tenant_id")
+  variantAttributes Json     @map("variant_attributes")
+  barcode           String?
+  costPrice         Decimal? @map("cost_price") @db.Decimal(10, 2)
+  wholesalePrice    Decimal? @map("wholesale_price") @db.Decimal(10, 2)
+  retailPrice       Decimal? @map("retail_price") @db.Decimal(10, 2)
+  weight            Decimal? @db.Decimal(8, 3)
+  images            Json?
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([code, tenantId])
+  @@index([productId])
+  @@index([tenantId])
+  @@map("skus")
+}

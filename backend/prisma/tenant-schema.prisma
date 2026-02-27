@@ -1,0 +1,176 @@
+// StockFlow Tenant Database Schema
+// Each tenant gets an isolated database with this schema
+// Updated: 2026-02-26T23:10:00
+//
+// NOTE: This file is used as a template for tenant database migrations.
+// It is NOT directly managed by Prisma CLI against the platform DB.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/tenant-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("TENANT_DATABASE_URL")
+}
+
+// ============================================================
+// Product Management
+// ============================================================
+
+/// Product category tree (e.g. Phone Cases → iPhone → iPhone 16 Pro Max)
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  nameEn    String?  @map("name_en")
+  code      String
+  parentId  String?  @map("parent_id")
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@unique([code, parentId])
+  @@map("categories")
+}
+
+/// Brand (e.g. Apple, Samsung, Xiaomi)
+model Brand {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String   @unique
+  logoUrl   String?  @map("logo_url")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  products Product[]
+
+  @@map("brands")
+}
+
+/// Attribute template for variant generation (e.g. Color, Material, Size)
+model AttributeTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  nameEn    String?  @map("name_en")
+  code      String   @unique
+  values    Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("attribute_templates")
+}
+
+/// SPU - Standard Product Unit (e.g. iPhone 16 PM Clear Silicone Case)
+model Product {
+  id           String        @id @default(uuid())
+  name         String
+  nameEn       String?       @map("name_en")
+  description  String?
+  descriptionEn String?      @map("description_en")
+  categoryId   String        @map("category_id")
+  brandId      String?       @map("brand_id")
+  status       ProductStatus @default(DRAFT)
+  images       Json?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  category Category @relation(fields: [categoryId], references: [id])
+  brand    Brand?   @relation(fields: [brandId], references: [id])
+  skus     Sku[]
+
+  @@map("products")
+}
+
+enum ProductStatus {
+  DRAFT
+  PRE_ORDER
+  ACTIVE
+  DISCONTINUED
+}
+
+/// SKU - Stock Keeping Unit (specific variant)
+model Sku {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  productId      String   @map("product_id")
+  variantAttributes Json  @map("variant_attributes")
+  barcode        String?
+  costPrice      Decimal? @map("cost_price") @db.Decimal(10, 2)
+  wholesalePrice Decimal? @map("wholesale_price") @db.Decimal(10, 2)
+  retailPrice    Decimal? @map("retail_price") @db.Decimal(10, 2)
+  weight         Decimal? @db.Decimal(8, 3)
+  images         Json?
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("skus")
+}
+
+// ============================================================
+// Warehouse & Inventory
+// ============================================================
+
+model Warehouse {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  address   String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  binLocations BinLocation[]
+
+  @@map("warehouses")
+}
+
+/// Bin location: Warehouse → Zone → Row → Shelf → Position (WH01-A-01-01)
+model BinLocation {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  warehouseId String   @map("warehouse_id")
+  zone        String
+  row         String
+  shelf       String
+  position    String
+  barcode     String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@index([warehouseId])
+  @@map("bin_locations")
+}
+
+// ============================================================
+// Audit Log
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  action     String
+  entity     String
+  entityId   String?  @map("entity_id")
+  oldValues  Json?    @map("old_values")
+  newValues  Json?    @map("new_values")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@map("audit_logs")
+}

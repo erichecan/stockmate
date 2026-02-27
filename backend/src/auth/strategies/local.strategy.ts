@@ -1,0 +1,31 @@
+// Updated: 2026-02-26T23:15:00
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { PassportStrategy } from '@nestjs/passport';
+import { Strategy } from 'passport-local';
+import { AuthService } from '../auth.service';
+
+@Injectable()
+export class LocalStrategy extends PassportStrategy(Strategy, 'local') {
+  constructor(private authService: AuthService) {
+    super({
+      usernameField: 'email',
+      passReqToCallback: true,
+    });
+  }
+
+  async validate(req: any, email: string, password: string) {
+    const tenantSlug = req.body?.tenantSlug;
+    if (!tenantSlug) {
+      throw new UnauthorizedException('Tenant slug is required');
+    }
+    const user = await this.authService.validateUser(
+      email,
+      password,
+      tenantSlug,
+    );
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    return user;
+  }
+}
