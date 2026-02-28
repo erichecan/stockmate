@@ -15,6 +15,11 @@ import {
   User,
   Settings,
   ChevronDown,
+  Truck,
+  Warehouse,
+  ShoppingCart,
+  PackageSearch,
+  QrCode,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -39,42 +44,63 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+// Updated: 2026-02-28T10:05:00
 const navItems = [
-  { href: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
-  { href: '/dashboard/products', label: '产品', icon: Package },
-  { href: '/dashboard/categories', label: '分类', icon: FolderTree },
-  { href: '/dashboard/brands', label: '品牌', icon: Tag },
-  { href: '/dashboard/skus', label: 'SKU', icon: Barcode },
+  { href: '/dashboard', label: '仪表盘', icon: LayoutDashboard, group: '概览' },
+  { href: '/dashboard/products', label: '产品', icon: Package, group: '商品' },
+  { href: '/dashboard/categories', label: '分类', icon: FolderTree, group: '商品' },
+  { href: '/dashboard/brands', label: '品牌', icon: Tag, group: '商品' },
+  { href: '/dashboard/skus', label: 'SKU', icon: Barcode, group: '商品' },
+  { href: '/dashboard/suppliers', label: '供应商', icon: Truck, group: '采购' },
+  { href: '/dashboard/purchasing', label: '采购单', icon: ShoppingCart, group: '采购' },
+  { href: '/dashboard/warehouses', label: '仓库', icon: Warehouse, group: '库存' },
+  { href: '/dashboard/inventory', label: '库存', icon: PackageSearch, group: '库存' },
+  { href: '/dashboard/barcode', label: '条码打印', icon: QrCode, group: '工具' },
 ];
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
-  return (
-    <nav className="flex flex-col gap-1 px-3">
-      {navItems.map((item) => {
-        const Icon = item.icon;
-        const isActive =
-          pathname === item.href ||
-          (item.href !== '/dashboard' && pathname.startsWith(item.href));
+  const groups = navItems.reduce<Record<string, typeof navItems>>((acc, item) => {
+    const group = item.group;
+    if (!acc[group]) acc[group] = [];
+    acc[group].push(item);
+    return acc;
+  }, {});
 
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {item.label}
-          </Link>
-        );
-      })}
+  return (
+    <nav className="flex flex-col gap-4 px-3">
+      {Object.entries(groups).map(([group, items]) => (
+        <div key={group}>
+          <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+            {group}
+          </p>
+          <div className="flex flex-col gap-0.5">
+            {items.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                pathname === item.href ||
+                (item.href !== '/dashboard' && pathname.startsWith(item.href));
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onNavigate}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </nav>
   );
 }

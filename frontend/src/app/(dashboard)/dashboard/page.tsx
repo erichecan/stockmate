@@ -1,9 +1,20 @@
-// Updated: 2026-02-27T04:45:00
+// Updated: 2026-02-28T10:40:00
 'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Package, Barcode, FolderTree, Tag, ArrowRight, Loader2 } from 'lucide-react';
+import {
+  Package,
+  Barcode,
+  FolderTree,
+  Tag,
+  ArrowRight,
+  Loader2,
+  Warehouse,
+  Truck,
+  ShoppingCart,
+  PackageSearch,
+} from 'lucide-react';
 
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
@@ -21,21 +32,32 @@ interface DashboardStats {
   skus: number;
   categories: number;
   brands: number;
+  suppliers: number;
+  warehouses: number;
+  purchaseOrders: number;
+  inventoryItems: number;
 }
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
-  const [stats, setStats] = useState<DashboardStats>({ products: 0, skus: 0, categories: 0, brands: 0 });
+  const [stats, setStats] = useState<DashboardStats>({
+    products: 0, skus: 0, categories: 0, brands: 0,
+    suppliers: 0, warehouses: 0, purchaseOrders: 0, inventoryItems: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [productsRes, skusRes, categoriesRes, brandsRes] = await Promise.all([
+        const [productsRes, skusRes, categoriesRes, brandsRes, suppliersRes, warehousesRes, posRes, inventoryRes] = await Promise.all([
           api.get('/products?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
           api.get('/skus?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
           api.get('/categories').catch(() => ({ data: [] })),
           api.get('/brands').catch(() => ({ data: [] })),
+          api.get('/suppliers?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
+          api.get('/warehouses').catch(() => ({ data: [] })),
+          api.get('/purchasing/orders?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
+          api.get('/inventory?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
         ]);
 
         setStats({
@@ -43,6 +65,10 @@ export default function DashboardPage() {
           skus: skusRes.data?.total ?? skusRes.data?.length ?? 0,
           categories: Array.isArray(categoriesRes.data) ? categoriesRes.data.filter((c: { isActive: boolean }) => c.isActive).length : 0,
           brands: Array.isArray(brandsRes.data) ? brandsRes.data.filter((b: { isActive: boolean }) => b.isActive).length : 0,
+          suppliers: suppliersRes.data?.total ?? 0,
+          warehouses: Array.isArray(warehousesRes.data) ? warehousesRes.data.length : 0,
+          purchaseOrders: posRes.data?.total ?? 0,
+          inventoryItems: inventoryRes.data?.total ?? 0,
         });
       } catch {
         // Silently fail, show zeros
@@ -81,6 +107,34 @@ export default function DashboardPage() {
       description: '启用中的产品品牌',
       icon: Tag,
       href: '/dashboard/brands',
+    },
+    {
+      title: '供应商',
+      value: stats.suppliers,
+      description: '合作供应商数量',
+      icon: Truck,
+      href: '/dashboard/suppliers',
+    },
+    {
+      title: '仓库',
+      value: stats.warehouses,
+      description: '已配置的仓库数',
+      icon: Warehouse,
+      href: '/dashboard/warehouses',
+    },
+    {
+      title: '采购单',
+      value: stats.purchaseOrders,
+      description: '所有采购订单数',
+      icon: ShoppingCart,
+      href: '/dashboard/purchasing',
+    },
+    {
+      title: '库存项',
+      value: stats.inventoryItems,
+      description: 'SKU × 仓库 库存记录',
+      icon: PackageSearch,
+      href: '/dashboard/inventory',
     },
   ];
 
@@ -143,25 +197,58 @@ export default function DashboardPage() {
                 </p>
               </div>
             </Link>
-            <Link href="/dashboard/brands">
+            <Link href="/dashboard/suppliers">
               <div className="group rounded-lg border p-4 transition-colors hover:border-primary hover:bg-accent">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-medium">2. 添加品牌</h3>
+                  <h3 className="font-medium">2. 添加供应商</h3>
                   <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  录入您经营的手机配件品牌，如 Apple、Samsung 等。
+                  录入合作供应商信息，管理联系人和交期。
                 </p>
               </div>
             </Link>
-            <Link href="/dashboard/products">
+            <Link href="/dashboard/warehouses">
               <div className="group rounded-lg border p-4 transition-colors hover:border-primary hover:bg-accent">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-medium">3. 录入产品</h3>
+                  <h3 className="font-medium">3. 配置仓库</h3>
                   <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  添加产品并创建 SKU 变体，系统将自动生成编码和条码。
+                  设置仓库和货位，为库存管理做好准备。
+                </p>
+              </div>
+            </Link>
+            <Link href="/dashboard/purchasing">
+              <div className="group rounded-lg border p-4 transition-colors hover:border-primary hover:bg-accent">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">4. 创建采购单</h3>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  选择供应商和 SKU，创建采购订单并追踪物流。
+                </p>
+              </div>
+            </Link>
+            <Link href="/dashboard/inventory">
+              <div className="group rounded-lg border p-4 transition-colors hover:border-primary hover:bg-accent">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">5. 管理库存</h3>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  入库、出库、调拨、盘点，实时掌控库存动态。
+                </p>
+              </div>
+            </Link>
+            <Link href="/dashboard/barcode">
+              <div className="group rounded-lg border p-4 transition-colors hover:border-primary hover:bg-accent">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">6. 条码打印</h3>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  批量生成 SKU 条码和二维码标签，支持多种尺寸。
                 </p>
               </div>
             </Link>
