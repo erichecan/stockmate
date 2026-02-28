@@ -1,0 +1,122 @@
+# StockFlow GCP Cloud Build - 部署 Backend + Frontend 到 Cloud Run
+# Updated: 2026-02-28T16:00:00
+#
+# 使用方法:
+#   gcloud builds submit --config=cloudbuild.yaml --project=stockmate-488805
+#
+# 环境变量 (Secret Manager 或 Cloud Run 控制台配置):
+#   Backend: DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, CORS_ORIGIN
+#   Frontend: NEXT_PUBLIC_API_URL (构建时传入，指向 Backend URL)
+
+substitutions:
+  _REGION: us-central1
+  _BACKEND_SERVICE: stockmate-api
+  _FRONTEND_SERVICE: stockmate-web
+  _ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/stockmate-488805/cloud-run-source-deploy
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # 0. 确保 Artifact Registry 仓库存在 (可选，首次部署时可能需要)
+  # 若报错，请先运行: gcloud artifacts repositories create cloud-run-source-deploy --repository-format=docker --location=us-central1
+
+  # 1. 构建 Backend 镜像
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: ensure-repo
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud artifacts repositories describe cloud-run-source-deploy --location=${_REGION} 2>/dev/null || \
+        gcloud artifacts repositories create cloud-run-source-deploy --repository-format=docker --location=${_REGION}
+
+  # 1. 构建 Backend 镜像
+  - name: gcr.io/cloud-builders/docker
+    id: build-backend
+    waitFor: ['ensure-repo']
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${SHORT_SHA}
+      - -f
+      - backend/Dockerfile
+      - .
+    dir: .
+
+  # 2. 推送 Backend 镜像
+  - name: gcr.io/cloud-builders/docker
+    id: push-backend
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${SHORT_SHA}
+    waitFor: ['build-backend']
+
+  # 3. 部署 Backend 到 Cloud Run
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-backend
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_BACKEND_SERVICE}
+      - --image
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${SHORT_SHA}
+      - --region
+      - ${_REGION}
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --port
+      - "3001"
+    waitFor: ['push-backend']
+
+  # 4. 获取 Backend URL (用于 Frontend 构建)
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: get-backend-url
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud run services describe ${_BACKEND_SERVICE} --region=${_REGION} --format='value(status.url)' > backend_url.txt
+        cat backend_url.txt
+    waitFor: ['deploy-backend']
+
+  # 5. 构建 Frontend 镜像 (注入 Backend API URL)
+  - name: gcr.io/cloud-builders/docker
+    id: build-frontend
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        API_URL=$$(cat backend_url.txt)/api
+        docker build --build-arg NEXT_PUBLIC_API_URL=$$API_URL -t ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${SHORT_SHA} -f frontend/Dockerfile .
+    dir: .
+    waitFor: ['get-backend-url']
+
+  # 6. 推送 Frontend 镜像
+  - name: gcr.io/cloud-builders/docker
+    id: push-frontend
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${SHORT_SHA}
+    waitFor: ['build-frontend']
+
+  # 7. 部署 Frontend 到 Cloud Run
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-frontend
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_FRONTEND_SERVICE}
+      - --image
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${SHORT_SHA}
+      - --region
+      - ${_REGION}
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --port
+      - "3000"
+    waitFor: ['push-frontend']

@@ -38,5 +38,8 @@ storage/debugbar/
 /resources/
 /storage/
 
+# GCP deploy temp
+backend_url.txt
+
 # Misc
 *.tsbuildinfo
