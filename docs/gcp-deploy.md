@@ -4,15 +4,20 @@
 
 ## 一、前置条件
 
-1. 安装 [gcloud CLI](https://cloud.google.com/sdk/docs/install)
-2. 登录并设置项目：
+1. **启用计费**（必须）：[控制台关联计费](https://console.cloud.google.com/billing/linkedaccount?project=stockmate-488805)
+   - 新用户有 $300 免费额度
+
+2. 安装 [gcloud CLI](https://cloud.google.com/sdk/docs/install-sdk?hl=zh-cn)
+
+3. 登录并设置项目：
    ```bash
    gcloud auth login
    gcloud config set project stockmate-488805
    ```
-3. 启用 API：
+
+4. **修复 bucket 权限**（若 `gcloud builds submit` 报 forbidden）：
    ```bash
-   gcloud services enable cloudbuild.googleapis.com run.googleapis.com artifactregistry.googleapis.com
+   ./scripts/fix-gcp-permissions.sh
    ```
 
 ## 二、环境变量 / Secret
@@ -32,12 +37,24 @@
 
 `NEXT_PUBLIC_API_URL` 在构建时由 Cloud Build 自动注入（指向 Backend URL + `/api`）。
 
-## 三、部署命令
+## 三、部署方式
+
+### 方式 A：手动部署（本地提交）
 
 ```bash
-# 在项目根目录
+# 若遇 bucket forbidden，先运行: ./scripts/fix-gcp-permissions.sh
 gcloud builds submit --config=cloudbuild.yaml --project=stockmate-488805
 ```
+
+### 方式 B：自动部署（GitHub Trigger，推荐）
+
+Push 到 `main` 即自动部署，无需本地提交。
+
+1. **首次**：在 [Cloud Build 触发器](https://console.cloud.google.com/cloud-build/triggers;region=us-central1?project=stockmate-488805) 连接 GitHub 仓库
+2. 运行：
+   ```bash
+   ./scripts/create-github-trigger.sh
+   ```
 
 部署完成后会输出：
 - Backend: `https://stockmate-api-xxx-uc.a.run.app`
