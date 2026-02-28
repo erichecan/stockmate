@@ -54,8 +54,9 @@ export class SkusController {
   async findAll(
     @CurrentUser('tenantId') tenantId: string,
     @Query() pagination: PaginationDto,
+    @Query('search') search?: string,
   ) {
-    return this.skusService.findAll(tenantId, pagination);
+    return this.skusService.findAll(tenantId, pagination, search);
   }
 
   @Get('product/:productId')

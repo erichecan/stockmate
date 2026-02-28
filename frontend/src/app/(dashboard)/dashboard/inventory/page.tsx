@@ -116,6 +116,8 @@ interface SkuOption {
 // ─── Constants ───────────────────────────────────────────────
 
 const PAGE_SIZE = 15;
+// Radix Select 禁止 value=""，用此常量表示“不指定”
+const BIN_NONE = '__none__';
 const LEDGER_TYPES = ['INBOUND', 'OUTBOUND', 'ADJUSTMENT', 'TRANSFER', 'LOCK', 'UNLOCK', 'RETURN'] as const;
 
 const LEDGER_TYPE_LABELS: Record<string, string> = {
@@ -258,7 +260,7 @@ export default function InventoryPage() {
   // Inbound form
   const [inboundSku, setInboundSku] = useState<SkuOption | null>(null);
   const [inboundWarehouseId, setInboundWarehouseId] = useState('');
-  const [inboundBinLocationId, setInboundBinLocationId] = useState('');
+  const [inboundBinLocationId, setInboundBinLocationId] = useState(BIN_NONE);
   const [inboundQuantity, setInboundQuantity] = useState('');
   const [inboundNotes, setInboundNotes] = useState('');
   const [inboundBins, setInboundBins] = useState<BinLocation[]>([]);
@@ -266,7 +268,7 @@ export default function InventoryPage() {
   // Outbound form
   const [outboundSku, setOutboundSku] = useState<SkuOption | null>(null);
   const [outboundWarehouseId, setOutboundWarehouseId] = useState('');
-  const [outboundBinLocationId, setOutboundBinLocationId] = useState('');
+  const [outboundBinLocationId, setOutboundBinLocationId] = useState(BIN_NONE);
   const [outboundQuantity, setOutboundQuantity] = useState('');
   const [outboundNotes, setOutboundNotes] = useState('');
   const [outboundBins, setOutboundBins] = useState<BinLocation[]>([]);
@@ -316,16 +318,20 @@ export default function InventoryPage() {
   useEffect(() => {
     if (inboundWarehouseId) {
       fetchBins(inboundWarehouseId).then(setInboundBins);
+      setInboundBinLocationId(BIN_NONE);
     } else {
       setInboundBins([]);
+      setInboundBinLocationId(BIN_NONE);
     }
   }, [inboundWarehouseId, fetchBins]);
 
   useEffect(() => {
     if (outboundWarehouseId) {
       fetchBins(outboundWarehouseId).then(setOutboundBins);
+      setOutboundBinLocationId(BIN_NONE);
     } else {
       setOutboundBins([]);
+      setOutboundBinLocationId(BIN_NONE);
     }
   }, [outboundWarehouseId, fetchBins]);
 
@@ -386,7 +392,7 @@ export default function InventoryPage() {
   const resetInboundForm = () => {
     setInboundSku(null);
     setInboundWarehouseId('');
-    setInboundBinLocationId('');
+    setInboundBinLocationId(BIN_NONE);
     setInboundQuantity('');
     setInboundNotes('');
   };
@@ -394,7 +400,7 @@ export default function InventoryPage() {
   const resetOutboundForm = () => {
     setOutboundSku(null);
     setOutboundWarehouseId('');
-    setOutboundBinLocationId('');
+    setOutboundBinLocationId(BIN_NONE);
     setOutboundQuantity('');
     setOutboundNotes('');
   };
@@ -429,7 +435,7 @@ export default function InventoryPage() {
       await api.post('/inventory/inbound', {
         skuId: inboundSku.id,
         warehouseId: inboundWarehouseId,
-        binLocationId: inboundBinLocationId || undefined,
+        binLocationId: inboundBinLocationId && inboundBinLocationId !== BIN_NONE ? inboundBinLocationId : undefined,
         quantity: qty,
         notes: inboundNotes || undefined,
       });
@@ -460,7 +466,7 @@ export default function InventoryPage() {
       await api.post('/inventory/outbound', {
         skuId: outboundSku.id,
         warehouseId: outboundWarehouseId,
-        binLocationId: outboundBinLocationId || undefined,
+        binLocationId: outboundBinLocationId && outboundBinLocationId !== BIN_NONE ? outboundBinLocationId : undefined,
         quantity: qty,
         notes: outboundNotes || undefined,
       });
@@ -565,7 +571,8 @@ export default function InventoryPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">库存管理</h1>
         <p className="text-muted-foreground">
-          查看库存台账、操作日志，执行入库、出库、调拨与数量调整
+          库存台账按「仓库」关联，货位来自「仓库管理」中配置的库位；货位为空表示暂存区。
+          查看库存台账、操作日志，执行入库、出库、调拨与数量调整。
         </p>
       </div>
 
@@ -844,12 +851,15 @@ export default function InventoryPage() {
             </div>
             <div className="grid gap-2">
               <Label>货位（可选）</Label>
-              <Select value={inboundBinLocationId} onValueChange={setInboundBinLocationId}>
+              <Select
+                value={inboundBinLocationId || BIN_NONE}
+                onValueChange={(v) => setInboundBinLocationId(v)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="选择货位" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">不指定</SelectItem>
+                  <SelectItem value={BIN_NONE}>不指定</SelectItem>
                   {inboundBins.map((b) => (
                     <SelectItem key={b.id} value={b.id}>
                       {b.code}
@@ -918,12 +928,15 @@ export default function InventoryPage() {
             </div>
             <div className="grid gap-2">
               <Label>货位（可选）</Label>
-              <Select value={outboundBinLocationId} onValueChange={setOutboundBinLocationId}>
+              <Select
+                value={outboundBinLocationId || BIN_NONE}
+                onValueChange={(v) => setOutboundBinLocationId(v)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="选择货位" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">不指定</SelectItem>
+                  <SelectItem value={BIN_NONE}>不指定</SelectItem>
                   {outboundBins.map((b) => (
                     <SelectItem key={b.id} value={b.id}>
                       {b.code}

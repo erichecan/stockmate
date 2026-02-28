@@ -1,5 +1,6 @@
 // Updated: 2026-02-27T04:30:00
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkuDto } from './dto/create-sku.dto';
 import { UpdateSkuDto } from './dto/update-sku.dto';
@@ -73,19 +74,27 @@ export class SkusService {
     return existing > 0 ? `${baseCode}-${existing + 1}` : baseCode;
   }
 
-  async findAll(tenantId: string, pagination: PaginationDto) {
+  async findAll(tenantId: string, pagination: PaginationDto, search?: string) {
     const { page, limit } = pagination;
     const skip = (page - 1) * limit;
 
+    const where: Prisma.SkuWhereInput = { tenantId, isActive: true };
+    if (search?.trim()) {
+      where.OR = [
+        { code: { contains: search.trim(), mode: 'insensitive' } },
+        { product: { name: { contains: search.trim(), mode: 'insensitive' } } },
+      ];
+    }
+
     const [data, total] = await Promise.all([
       this.prisma.sku.findMany({
-        where: { tenantId, isActive: true },
+        where,
         skip,
         take: limit,
         include: { product: { include: { category: true, brand: true } } },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.sku.count({ where: { tenantId, isActive: true } }),
+      this.prisma.sku.count({ where }),
     ]);
 
     return new PaginatedResponseDto(data, total, page, limit);

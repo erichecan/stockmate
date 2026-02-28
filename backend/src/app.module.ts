@@ -17,6 +17,8 @@ import { PurchasingModule } from './purchasing/purchasing.module';
 import { WarehousesModule } from './warehouses/warehouses.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { BarcodeModule } from './barcode/barcode.module';
+import { CustomersModule } from './customers/customers.module';
+import { SalesOrdersModule } from './sales-orders/sales-orders.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -40,6 +42,8 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     WarehousesModule,
     InventoryModule,
     BarcodeModule,
+    CustomersModule,
+    SalesOrdersModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

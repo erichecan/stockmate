@@ -42,6 +42,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+// Updated: 2026-02-28T12:00:00 - barcode popup, bin creation for all warehouses
+
 // ─── Types ─────────────────────────────────────────────────────────────
 
 interface Warehouse {
@@ -119,6 +121,12 @@ export default function WarehousesPage() {
   const [binDeleteOpen, setBinDeleteOpen] = useState(false);
   const [deletingBin, setDeletingBin] = useState<BinLocation | null>(null);
   const [binDeleting, setBinDeleting] = useState(false);
+
+  // Barcode preview dialog
+  const [barcodePopupOpen, setBarcodePopupOpen] = useState(false);
+  const [barcodeText, setBarcodeText] = useState('');
+  const [barcodeImageUrl, setBarcodeImageUrl] = useState<string | null>(null);
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
 
   // ─── Data Fetching ───────────────────────────────────────────────────
 
@@ -336,6 +344,23 @@ export default function WarehousesPage() {
     setBinDeleteOpen(true);
   };
 
+  const openBarcodePopup = async (text: string) => {
+    setBarcodeText(text);
+    setBarcodeImageUrl(null);
+    setBarcodePopupOpen(true);
+    setBarcodeLoading(true);
+    try {
+      const { data } = await api.get<string>(`/barcode/code128/dataurl`, {
+        params: { text },
+      });
+      setBarcodeImageUrl(typeof data === 'string' ? data : null);
+    } catch {
+      setBarcodeImageUrl(null);
+    } finally {
+      setBarcodeLoading(false);
+    }
+  };
+
   const handleBinDelete = async () => {
     if (!deletingBin || !selectedWarehouse) return;
     setBinDeleting(true);
@@ -356,7 +381,13 @@ export default function WarehousesPage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">仓库与库位管理</h1>
+        <div>
+          <h1 className="text-2xl font-semibold">仓库与库位管理</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            仓库列表：选择物理仓库；库位列表：管理该仓库内的具体货架位置（区-通道-架-位）。
+            库位用于入库时指定存放位置、拣货时按货位导航。
+          </p>
+        </div>
         <Button onClick={openWarehouseCreate} size="sm">
           <Plus className="mr-1 size-4" />
           新增仓库
@@ -496,16 +527,17 @@ export default function WarehousesPage() {
                       <TableCell>{b.position ?? '-'}</TableCell>
                       <TableCell>
                         {b.barcode ? (
-                          <a
-                            href={`#barcode-${b.barcode}`}
+                          <button
+                            type="button"
+                            onClick={() => openBarcodePopup(b.barcode!)}
                             className="flex items-center gap-1 text-primary hover:underline"
-                            title={b.barcode}
+                            title="点击查看条码"
                           >
                             <QrCode className="size-3.5" />
                             <span className="truncate max-w-[80px]">
                               {b.barcode}
                             </span>
-                          </a>
+                          </button>
                         ) : (
                           '-'
                         )}
@@ -749,6 +781,38 @@ export default function WarehousesPage() {
               保存
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Barcode preview dialog */}
+      <Dialog open={barcodePopupOpen} onOpenChange={setBarcodePopupOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>货位条码</DialogTitle>
+            <DialogDescription>
+              货位 {barcodeText} 的 Code128 条码，可用于打印标签或 PDA 扫码
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-4">
+            {barcodeLoading ? (
+              <div className="flex h-24 items-center justify-center">
+                <Loader2 className="size-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : barcodeImageUrl ? (
+              <>
+                <img
+                  src={barcodeImageUrl}
+                  alt={`条码 ${barcodeText}`}
+                  className="max-h-24 w-full object-contain"
+                />
+                <p className="text-center text-sm text-muted-foreground font-mono">
+                  {barcodeText}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">加载失败</p>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

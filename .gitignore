@@ -25,6 +25,8 @@ out/
 
 # Testing
 coverage/
+frontend/playwright-report/
+frontend/test-results/
 
 # Logs
 *.log

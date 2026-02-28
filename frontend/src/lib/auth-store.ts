@@ -32,7 +32,7 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string, tenantSlug: string) => Promise<void>;
+  login: (email: string, password: string, tenantSlug?: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   fetchProfile: () => Promise<void>;
@@ -44,11 +44,15 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   isAuthenticated: false,
 
-  login: async (email, password, tenantSlug) => {
-    const { data } = await api.post('/auth/login', { email, password, tenantSlug });
+  login: async (email, password, tenantSlug?: string) => {
+    const payload: { email: string; password: string; tenantSlug?: string } = { email, password };
+    if (tenantSlug?.trim()) payload.tenantSlug = tenantSlug.trim();
+    const { data } = await api.post('/auth/login', payload);
     localStorage.setItem('accessToken', data.accessToken);
     localStorage.setItem('refreshToken', data.refreshToken);
     localStorage.setItem('userId', data.user.id);
+    const slugToSave = tenantSlug?.trim() || data.user?.tenantSlug;
+    if (slugToSave) localStorage.setItem('lastTenantSlug', slugToSave);
     set({ user: data.user, isAuthenticated: true });
     const profile = await api.get('/auth/profile');
     set({ user: profile.data });

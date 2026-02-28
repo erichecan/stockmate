@@ -14,10 +14,7 @@ export class LocalStrategy extends PassportStrategy(Strategy, 'local') {
   }
 
   async validate(req: any, email: string, password: string) {
-    const tenantSlug = req.body?.tenantSlug;
-    if (!tenantSlug) {
-      throw new UnauthorizedException('Tenant slug is required');
-    }
+    const tenantSlug = req.body?.tenantSlug?.trim() || undefined;
     const user = await this.authService.validateUser(
       email,
       password,

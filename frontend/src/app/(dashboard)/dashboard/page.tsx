@@ -14,6 +14,8 @@ import {
   Truck,
   ShoppingCart,
   PackageSearch,
+  Users,
+  FileText,
 } from 'lucide-react';
 
 import api from '@/lib/api';
@@ -33,8 +35,10 @@ interface DashboardStats {
   categories: number;
   brands: number;
   suppliers: number;
+  customers: number;
   warehouses: number;
   purchaseOrders: number;
+  salesOrdersPending: number;
   inventoryItems: number;
 }
 
@@ -42,21 +46,24 @@ export default function DashboardPage() {
   const { user } = useAuthStore();
   const [stats, setStats] = useState<DashboardStats>({
     products: 0, skus: 0, categories: 0, brands: 0,
-    suppliers: 0, warehouses: 0, purchaseOrders: 0, inventoryItems: 0,
+    suppliers: 0, customers: 0, warehouses: 0, purchaseOrders: 0,
+    salesOrdersPending: 0, inventoryItems: 0,
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [productsRes, skusRes, categoriesRes, brandsRes, suppliersRes, warehousesRes, posRes, inventoryRes] = await Promise.all([
+        const [productsRes, skusRes, categoriesRes, brandsRes, suppliersRes, customersRes, warehousesRes, posRes, soRes, inventoryRes] = await Promise.all([
           api.get('/products?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
           api.get('/skus?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
           api.get('/categories').catch(() => ({ data: [] })),
           api.get('/brands').catch(() => ({ data: [] })),
           api.get('/suppliers?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
+          api.get('/customers?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
           api.get('/warehouses').catch(() => ({ data: [] })),
           api.get('/purchasing/orders?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
+          api.get('/sales-orders?page=1&limit=1&status=PENDING').catch(() => ({ data: { total: 0 } })),
           api.get('/inventory?page=1&limit=1').catch(() => ({ data: { total: 0 } })),
         ]);
 
@@ -66,8 +73,10 @@ export default function DashboardPage() {
           categories: Array.isArray(categoriesRes.data) ? categoriesRes.data.filter((c: { isActive: boolean }) => c.isActive).length : 0,
           brands: Array.isArray(brandsRes.data) ? brandsRes.data.filter((b: { isActive: boolean }) => b.isActive).length : 0,
           suppliers: suppliersRes.data?.total ?? 0,
+          customers: customersRes.data?.total ?? 0,
           warehouses: Array.isArray(warehousesRes.data) ? warehousesRes.data.length : 0,
           purchaseOrders: posRes.data?.total ?? 0,
+          salesOrdersPending: soRes.data?.total ?? 0,
           inventoryItems: inventoryRes.data?.total ?? 0,
         });
       } catch {
@@ -116,6 +125,13 @@ export default function DashboardPage() {
       href: '/dashboard/suppliers',
     },
     {
+      title: '客户',
+      value: stats.customers,
+      description: '批发客户数量',
+      icon: Users,
+      href: '/dashboard/customers',
+    },
+    {
       title: '仓库',
       value: stats.warehouses,
       description: '已配置的仓库数',
@@ -128,6 +144,13 @@ export default function DashboardPage() {
       description: '所有采购订单数',
       icon: ShoppingCart,
       href: '/dashboard/purchasing',
+    },
+    {
+      title: '待处理订单',
+      value: stats.salesOrdersPending,
+      description: '待确认销售订单',
+      icon: FileText,
+      href: '/dashboard/sales-orders',
     },
     {
       title: '库存项',
@@ -241,10 +264,21 @@ export default function DashboardPage() {
                 </p>
               </div>
             </Link>
+            <Link href="/dashboard/customers">
+              <div className="group rounded-lg border p-4 transition-colors hover:border-primary hover:bg-accent">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">6. 添加客户</h3>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  管理批发客户，按等级设置批发价格折扣。
+                </p>
+              </div>
+            </Link>
             <Link href="/dashboard/barcode">
               <div className="group rounded-lg border p-4 transition-colors hover:border-primary hover:bg-accent">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-medium">6. 条码打印</h3>
+                  <h3 className="font-medium">7. 条码打印</h3>
                   <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">

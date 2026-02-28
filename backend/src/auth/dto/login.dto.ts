@@ -1,6 +1,7 @@
-// Updated: 2026-02-26T23:15:00
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+// 简化登录：公司标识可选，按邮箱自动推断租户
+// Updated: 2026-02-28T15:00:00
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class LoginDto {
   @ApiProperty({ example: 'admin@example.com' })
@@ -14,8 +15,8 @@ export class LoginDto {
   @MinLength(6)
   password!: string;
 
-  @ApiProperty({ example: 'my-company', description: 'Tenant slug identifier' })
+  @ApiPropertyOptional({ example: 'my-company', description: '公司标识，可选；不填时按邮箱自动推断' })
   @IsString()
-  @IsNotEmpty()
-  tenantSlug!: string;
+  @IsOptional()
+  tenantSlug?: string;
 }

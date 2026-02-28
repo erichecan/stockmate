@@ -20,6 +20,8 @@ import {
   ShoppingCart,
   PackageSearch,
   QrCode,
+  Users,
+  FileText,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -53,6 +55,8 @@ const navItems = [
   { href: '/dashboard/skus', label: 'SKU', icon: Barcode, group: '商品' },
   { href: '/dashboard/suppliers', label: '供应商', icon: Truck, group: '采购' },
   { href: '/dashboard/purchasing', label: '采购单', icon: ShoppingCart, group: '采购' },
+  { href: '/dashboard/customers', label: '客户', icon: Users, group: '销售' },
+  { href: '/dashboard/sales-orders', label: '销售订单', icon: FileText, group: '销售' },
   { href: '/dashboard/warehouses', label: '仓库', icon: Warehouse, group: '库存' },
   { href: '/dashboard/inventory', label: '库存', icon: PackageSearch, group: '库存' },
   { href: '/dashboard/barcode', label: '条码打印', icon: QrCode, group: '工具' },

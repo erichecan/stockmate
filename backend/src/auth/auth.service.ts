@@ -22,17 +22,38 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
-  async validateUser(email: string, password: string, tenantSlug: string) {
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { slug: tenantSlug },
-    });
-    if (!tenant || tenant.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Tenant not found or inactive');
+  /** 验证用户：tenantSlug 可选；不填时按邮箱查找，仅当唯一匹配时通过 */
+  async validateUser(email: string, password: string, tenantSlug?: string) {
+    let user: { id: string; email: string; tenantId: string; passwordHash: string; isActive: boolean; firstName: string | null; lastName: string | null; role: UserRole } | null = null;
+
+    if (tenantSlug?.trim()) {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { slug: tenantSlug.trim() },
+      });
+      if (!tenant || tenant.status !== 'ACTIVE') {
+        throw new UnauthorizedException('Tenant not found or inactive');
+      }
+      user = await this.prisma.user.findUnique({
+        where: { email_tenantId: { email, tenantId: tenant.id } },
+      });
+    } else {
+      const users = await this.prisma.user.findMany({
+        where: { email, isActive: true },
+        include: { tenant: true },
+      });
+      const activeUsers = users.filter((u) => u.tenant?.status === 'ACTIVE');
+      if (activeUsers.length === 0) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      if (activeUsers.length > 1) {
+        const tenants = activeUsers.map((u) => ({ slug: u.tenant!.slug, name: u.tenant!.name }));
+        throw new UnauthorizedException(
+          JSON.stringify({ code: 'MULTIPLE_TENANTS', tenants }),
+        );
+      }
+      user = activeUsers[0];
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { email_tenantId: { email, tenantId: tenant.id } },
-    });
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -78,6 +99,10 @@ export class AuthService {
 
     await this.updateRefreshToken(user.id, refreshToken);
 
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: user.tenantId },
+      select: { slug: true },
+    });
     return {
       accessToken,
       refreshToken,
@@ -86,6 +111,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
+        tenantSlug: tenant?.slug,
       },
     };
   }

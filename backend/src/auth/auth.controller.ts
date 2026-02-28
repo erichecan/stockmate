@@ -34,7 +34,7 @@ export class AuthController {
     const user = await this.authService.validateUser(
       dto.email,
       dto.password,
-      dto.tenantSlug,
+      dto.tenantSlug?.trim(),
     );
     return this.authService.login(user);
   }
