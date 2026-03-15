@@ -1,11 +1,11 @@
 // Phase 3: Sales Orders Service
-// Updated: 2026-02-28T14:20:00
+// Updated: 2026-03-14T17:40:00 - 批发站 P0: 支持订单来源（OrderSource）
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CustomerTier, Prisma, SOStatus } from '@prisma/client';
+import { CustomerTier, OrderSource, Prisma, SOStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { PaginatedResponseDto } from '../common/dto/pagination.dto';
@@ -50,7 +50,11 @@ export class SalesOrdersService {
     return `${prefix}${String(count + 1).padStart(4, '0')}`;
   }
 
-  async create(tenantId: string, dto: CreateSalesOrderDto) {
+  async create(
+    tenantId: string,
+    dto: CreateSalesOrderDto,
+    source: OrderSource = OrderSource.MANUAL,
+  ) {
     const [customer, warehouse] = await Promise.all([
       this.prisma.customer.findFirst({ where: { id: dto.customerId, tenantId } }),
       this.prisma.warehouse.findFirst({ where: { id: dto.warehouseId, tenantId } }),
@@ -72,6 +76,7 @@ export class SalesOrdersService {
           currency: dto.currency ?? 'EUR',
           notes: dto.notes,
           status: SOStatus.PENDING,
+          source,
         },
       });
 

@@ -1,26 +1,54 @@
-// Updated: 2026-02-26T23:15:00
+// Updated: 2026-03-14T18:10:00 - 批发站 P0: 支持批发站登录/注册与 customer 绑定
 import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { UserRole } from '@prisma/client';
+import { CustomerTier, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { CustomersService } from '../customers/customers.service';
+import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private customersService: CustomersService,
   ) {}
+
+  private mapLoginUserInput(user: {
+    id: string;
+    email: string;
+    role: UserRole;
+    tenantId: string;
+    customerId?: string | null;
+    customerTier?: CustomerTier | null;
+    audience?: 'BACKOFFICE' | 'WHOLESALE';
+  }) {
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      tenantId: user.tenantId,
+      customerId: user.customerId ?? undefined,
+      customerTier: user.customerTier ?? undefined,
+      audience:
+        user.audience ??
+        (user.customerId ? ('WHOLESALE' as const) : ('BACKOFFICE' as const)),
+    };
+  }
 
   /** 验证用户：tenantSlug 可选；不填时按邮箱查找，仅当唯一匹配时通过 */
   async validateUser(email: string, password: string, tenantSlug?: string) {
@@ -75,15 +103,29 @@ export class AuthService {
       tenantId: user.tenantId,
       firstName: user.firstName,
       lastName: user.lastName,
+      customerId: (user as any).customerId ?? null,
     };
   }
 
-  async login(user: { id: string; email: string; role: string; tenantId: string }) {
+  async login(user: {
+    id: string;
+    email: string;
+    role: string;
+    tenantId: string;
+    customerId?: string;
+    customerTier?: CustomerTier;
+    audience?: 'BACKOFFICE' | 'WHOLESALE';
+  }) {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       tenantId: user.tenantId,
       role: user.role,
+      customerId: user.customerId,
+      customerTier: user.customerTier,
+      audience:
+        user.audience ??
+        (user.customerId ? ('WHOLESALE' as const) : ('BACKOFFICE' as const)),
     };
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -112,6 +154,9 @@ export class AuthService {
         role: user.role,
         tenantId: user.tenantId,
         tenantSlug: tenant?.slug,
+        customerId: user.customerId,
+        customerTier: user.customerTier,
+        audience: payload.audience,
       },
     };
   }
@@ -134,6 +179,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       tenantId: user.tenantId,
+      customerId: user.customerId ?? undefined,
     });
   }
 
@@ -168,12 +214,14 @@ export class AuthService {
     });
 
     const adminUser = tenant.users[0];
-    return this.login({
-      id: adminUser.id,
-      email: adminUser.email,
-      role: adminUser.role,
-      tenantId: adminUser.tenantId,
-    });
+    return this.login(
+      this.mapLoginUserInput({
+        id: adminUser.id,
+        email: adminUser.email,
+        role: adminUser.role,
+        tenantId: adminUser.tenantId,
+      }),
+    );
   }
 
   async hashPassword(password: string): Promise<string> {
@@ -223,5 +271,75 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
     return user;
+  }
+
+  // Updated: 2026-03-14T18:10:00 - 批发站 P0: 批发站登录
+  async wholesaleLogin(dto: LoginDto) {
+    const user = await this.validateUser(
+      dto.email,
+      dto.password,
+      dto.tenantSlug?.trim(),
+    );
+
+    // 2026-03-15 若无绑定客户则先按邮箱查找；若仍无则自动创建默认客户，便于测试账号 admin@test.com 登录批发站
+    let customerId: string | undefined = (user as any).customerId ?? undefined;
+    if (!customerId) {
+      let guessed = await this.prisma.customer.findFirst({
+        where: {
+          email: user.email,
+          tenantId: user.tenantId,
+          isActive: true,
+        },
+      });
+      if (!guessed) {
+        const baseCode = `WH-${user.id.slice(0, 8).toUpperCase()}`;
+        const finalCode = `${baseCode}-${Date.now().toString(36).slice(-6)}`;
+        const displayName =
+          (user as any).firstName || (user as any).lastName
+            ? `${((user as any).firstName ?? '').trim()} ${((user as any).lastName ?? '').trim()}`.trim()
+            : '批发客户';
+        try {
+          guessed = await this.prisma.customer.create({
+            data: {
+              name: displayName || '批发客户',
+              code: finalCode,
+              email: user.email,
+              tenantId: user.tenantId,
+              isActive: true,
+            },
+          });
+        } catch (e) {
+          this.logger.warn(
+            `wholesaleLogin: create customer failed for ${user.email}: ${e instanceof Error ? e.message : String(e)}`,
+          );
+          if (e instanceof Error && e.stack) this.logger.debug(e.stack);
+          throw new ForbiddenException(
+            '无法创建批发客户记录，请稍后重试或联系管理员',
+          );
+        }
+      }
+      customerId = guessed.id;
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { customerId },
+      });
+    }
+
+    const customer = await this.prisma.customer.findFirst({
+      where: { id: customerId, tenantId: user.tenantId, isActive: true },
+    });
+    if (!customer) {
+      throw new ForbiddenException('Customer not found or inactive');
+    }
+
+    return this.login({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      tenantId: user.tenantId,
+      customerId: customer.id,
+      customerTier: customer.tier,
+      audience: 'WHOLESALE',
+    });
   }
 }

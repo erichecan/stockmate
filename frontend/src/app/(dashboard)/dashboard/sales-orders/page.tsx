@@ -15,10 +15,12 @@ import {
   XCircle,
   Truck,
   ClipboardList,
+  Printer,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import api from '@/lib/api';
+import { printWithTemplate } from '@/lib/print-document';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -192,6 +194,7 @@ export default function SalesOrdersPage() {
     warehouseName: string;
     items: PickListItem[];
   } | null>(null);
+  const [printLoading, setPrintLoading] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -372,6 +375,51 @@ export default function SalesOrdersPage() {
       toast.error('获取拣货单失败');
     }
   }, [selectedSO]);
+
+  const handlePrintOutbound = useCallback(async () => {
+    if (!selectedSO) return;
+    setPrintLoading(true);
+    try {
+      const itemsHtml = (selectedSO.items ?? [])
+        .map(
+          (item) =>
+            `<tr><td>${item.sku?.code ?? ''}</td><td>${item.sku?.product?.name ?? '-'}</td><td>${item.quantity}</td></tr>`,
+        )
+        .join('');
+      const totalQty = (selectedSO.items ?? []).reduce((s, i) => s + i.quantity, 0);
+      const ok = await printWithTemplate(api, 'OUTBOUND_SHEET', {
+        orderNumber: selectedSO.orderNumber,
+        customerName: selectedSO.customer?.name ?? '',
+        shipDate: selectedSO.shippedAt ? formatDate(selectedSO.shippedAt) : '-',
+        items: itemsHtml,
+        totalQty: String(totalQty),
+      });
+      if (!ok) toast.error('未配置出库单打印模板，请先在「打印方案」中创建');
+    } finally {
+      setPrintLoading(false);
+    }
+  }, [selectedSO]);
+
+  const handlePrintPickList = useCallback(async () => {
+    if (!pickListData) return;
+    setPrintLoading(true);
+    try {
+      const itemsHtml = (pickListData.items ?? [])
+        .map(
+          (row) =>
+            `<tr><td>${row.binCode}</td><td>${row.skuCode}</td><td>${row.skuName}</td><td>${row.quantity}</td></tr>`,
+        )
+        .join('');
+      const ok = await printWithTemplate(api, 'PICK_LIST', {
+        orderNumber: pickListData.orderNumber,
+        warehouseName: pickListData.warehouseName,
+        items: itemsHtml,
+      });
+      if (!ok) toast.error('未配置拣货单打印模板，请先在「打印方案」中创建');
+    } finally {
+      setPrintLoading(false);
+    }
+  }, [pickListData]);
 
   const handleFulfill = useCallback(async () => {
     if (!selectedSO) return;
@@ -762,39 +810,45 @@ export default function SalesOrdersPage() {
                 </Table>
               </div>
 
-              {(selectedSO.status === 'PENDING' ||
-                selectedSO.status === 'CONFIRMED' ||
-                selectedSO.status === 'PICKING' ||
-                selectedSO.status === 'PACKED') && (
-                <div className="flex flex-wrap gap-2 pt-4 border-t">
-                  {selectedSO.status === 'PENDING' && (
-                    <Button onClick={handleConfirm} disabled={actionLoading}>
-                      {actionLoading && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                      <CheckCircle className="mr-1.5 h-4 w-4" />
-                      确认订单
-                    </Button>
-                  )}
-                  {(selectedSO.status === 'PENDING' || selectedSO.status === 'CONFIRMED') && (
-                    <Button variant="destructive" onClick={handleCancel} disabled={actionLoading}>
-                      <XCircle className="mr-1.5 h-4 w-4" />
-                      取消订单
-                    </Button>
-                  )}
-                  {(selectedSO.status === 'CONFIRMED' || selectedSO.status === 'PICKING' || selectedSO.status === 'PACKED') && (
-                    <>
-                      <Button variant="outline" onClick={handleOpenPickList}>
-                        <ClipboardList className="mr-1.5 h-4 w-4" />
-                        拣货单
-                      </Button>
-                      <Button onClick={handleFulfill} disabled={actionLoading}>
+              <div className="flex flex-wrap gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={handlePrintOutbound} disabled={printLoading}>
+                  {printLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Printer className="mr-1.5 h-4 w-4" />}
+                  打印出库单
+                </Button>
+                {(selectedSO.status === 'PENDING' ||
+                  selectedSO.status === 'CONFIRMED' ||
+                  selectedSO.status === 'PICKING' ||
+                  selectedSO.status === 'PACKED') && (
+                  <>
+                    {selectedSO.status === 'PENDING' && (
+                      <Button onClick={handleConfirm} disabled={actionLoading}>
                         {actionLoading && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                        <Truck className="mr-1.5 h-4 w-4" />
-                        出库确认
+                        <CheckCircle className="mr-1.5 h-4 w-4" />
+                        确认订单
                       </Button>
-                    </>
-                  )}
-                </div>
-              )}
+                    )}
+                    {(selectedSO.status === 'PENDING' || selectedSO.status === 'CONFIRMED') && (
+                      <Button variant="destructive" onClick={handleCancel} disabled={actionLoading}>
+                        <XCircle className="mr-1.5 h-4 w-4" />
+                        取消订单
+                      </Button>
+                    )}
+                    {(selectedSO.status === 'CONFIRMED' || selectedSO.status === 'PICKING' || selectedSO.status === 'PACKED') && (
+                      <>
+                        <Button variant="outline" onClick={handleOpenPickList}>
+                          <ClipboardList className="mr-1.5 h-4 w-4" />
+                          拣货单
+                        </Button>
+                        <Button onClick={handleFulfill} disabled={actionLoading}>
+                          {actionLoading && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                          <Truck className="mr-1.5 h-4 w-4" />
+                          出库确认
+                        </Button>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           ) : null}
         </SheetContent>
@@ -834,7 +888,10 @@ export default function SalesOrdersPage() {
             )}
           </div>
           <DialogFooter>
-            <Button onClick={() => window.print()}>打印</Button>
+            <Button onClick={handlePrintPickList} disabled={printLoading || !pickListData?.items?.length}>
+              {printLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Printer className="mr-1.5 h-4 w-4" />}
+              打印拣货单
+            </Button>
             <Button variant="outline" onClick={() => setPickListOpen(false)}>
               关闭
             </Button>

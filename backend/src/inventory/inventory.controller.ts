@@ -1,4 +1,4 @@
-// Updated: 2026-02-28T10:00:00
+// Updated: 2026-03-14 - Phase 3: by-location endpoint, getInventory binLocationId
 import {
   Body,
   Controller,
@@ -31,9 +31,10 @@ export class InventoryController {
   constructor(private inventoryService: InventoryService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List inventory with pagination' })
+  @ApiOperation({ summary: 'List inventory with pagination (stock list)' })
   @ApiQuery({ name: 'skuId', required: false })
   @ApiQuery({ name: 'warehouseId', required: false })
+  @ApiQuery({ name: 'binLocationId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Inventory list returned' })
@@ -41,11 +42,32 @@ export class InventoryController {
     @CurrentUser('tenantId') tenantId: string,
     @Query('skuId') skuId?: string,
     @Query('warehouseId') warehouseId?: string,
+    @Query('binLocationId') binLocationId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.inventoryService.getInventory(tenantId, {
       skuId,
+      warehouseId,
+      binLocationId,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  @Get('by-location')
+  @ApiOperation({ summary: 'List inventory by location (location list, paginated)' })
+  @ApiQuery({ name: 'warehouseId', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Inventory by location returned' })
+  async getInventoryByLocation(
+    @CurrentUser('tenantId') tenantId: string,
+    @Query('warehouseId') warehouseId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.inventoryService.getInventoryByLocation(tenantId, {
       warehouseId,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
@@ -138,6 +160,7 @@ export class InventoryController {
   @ApiQuery({ name: 'skuId', required: false })
   @ApiQuery({ name: 'warehouseId', required: false })
   @ApiQuery({ name: 'type', required: false, enum: LedgerType })
+  @ApiQuery({ name: 'referenceType', required: false, description: 'e.g. TRANSFER for move records' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -148,6 +171,7 @@ export class InventoryController {
     @Query('skuId') skuId?: string,
     @Query('warehouseId') warehouseId?: string,
     @Query('type') type?: LedgerType,
+    @Query('referenceType') referenceType?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('page') page?: string,
@@ -157,6 +181,7 @@ export class InventoryController {
       skuId,
       warehouseId,
       type: type as LedgerType | undefined,
+      referenceType,
       startDate,
       endDate,
       page: page ? parseInt(page, 10) : undefined,

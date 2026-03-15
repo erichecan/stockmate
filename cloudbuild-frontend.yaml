@@ -1,0 +1,91 @@
+# StockFlow - 仅部署 Frontend（增量部署，约 4-6 分钟）
+# Updated: 2026-02-28T17:30:00
+# 用法: ./scripts/deploy-frontend.sh  或  gcloud builds submit --config=cloudbuild-frontend.yaml
+# 前提: Backend 已部署，会从 Cloud Run 读取当前 Backend URL
+
+substitutions:
+  _REGION: us-central1
+  _BACKEND_SERVICE: stockmate-api
+  _FRONTEND_SERVICE: stockmate-web
+
+steps:
+  # 从已部署的 Backend 获取 URL（无需重新部署）
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: get-backend-url
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        URL=$$(gcloud run services describe ${_BACKEND_SERVICE} --region=${_REGION} --format='value(status.url)')
+        [ -z "$$URL" ] && { echo "Backend 未部署，请先运行 ./scripts/deploy-backend.sh"; exit 1; }
+        echo "$$URL" > backend_url.txt
+        echo "Backend URL: $$URL"
+
+  # 拉取上次 Frontend 镜像作缓存
+  - name: gcr.io/cloud-builders/docker
+    id: pull-cache
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:latest || true
+
+  - name: gcr.io/cloud-builders/docker
+    id: build-frontend
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        API_URL=$$(cat backend_url.txt)/api
+        docker build --cache-from ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:latest \
+          --build-arg NEXT_PUBLIC_API_URL=$$API_URL \
+          -t ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${BUILD_ID} \
+          -t ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:latest \
+          -f frontend/Dockerfile .
+    dir: .
+    waitFor: ['get-backend-url', 'pull-cache']
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-frontend
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${BUILD_ID}
+    waitFor: ['build-frontend']
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-latest
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:latest
+    waitFor: ['build-frontend']
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-frontend
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_FRONTEND_SERVICE}
+      - --image
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${BUILD_ID}
+      - --region
+      - ${_REGION}
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --port
+      - "3000"
+    waitFor: ['push-frontend']
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: iam-frontend
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - add-iam-policy-binding
+      - ${_FRONTEND_SERVICE}
+      - --region=${_REGION}
+      - --member=allUsers
+      - --role=roles/run.invoker
+    waitFor: ['deploy-frontend']

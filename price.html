@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>B2B 全链路数字化业务操作系统 - 深度定制版</title>
+    <style>
+        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; line-height: 1.4; color: #333; max-width: 1400px; margin: 0 auto; padding: 20px; background-color: #f4f6f8; }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 5px; }
+        .subtitle { text-align: center; color: #7f8c8d; margin-bottom: 25px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1); table-layout: fixed; }
+        th, td { padding: 12px 10px; border: 1px solid #dfe6e9; word-wrap: break-word; vertical-align: middle; }
+        th { background-color: #f8f9fa; font-weight: 600; font-size: 14px; }
+        .feature-col { text-align: left; width: 320px; background-color: #fff; }
+        .pain-point { display: block; font-size: 11px; color: #d35400; margin-top: 4px; padding-left: 0; font-weight: normal; line-height: 1.35; }
+        .category-head { background-color: #2c3e50; color: #fff; text-align: left; padding: 10px 15px; font-weight: bold; font-size: 15px; }
+        .price-row { background-color: #fff; font-weight: bold; color: #e74c3c; font-size: 15px; text-align: center; }
+        .roi-text { font-size: 12px; color: #7f8c8d; font-weight: normal; display: block; margin-top: 5px; }
+        .check { color: #27ae60; font-weight: bold; }
+        .cross { color: #bdc3c7; }
+        .custom-item { color: #8e44ad; font-weight: bold; background-color: #fdfaff; }
+        .tag-essential { display: inline-block; background: #e8f4fd; color: #3498db; font-size: 10px; padding: 1px 4px; border-radius: 3px; margin-right: 5px; }
+        /* PDF/打印：A4 适配，再缩小字体与间距，避免出格；仅首列与定制列可换行 */
+        @media print {
+            body { background: #fff; padding: 6px; font-size: 10px; }
+            h1 { font-size: 14px; margin-bottom: 3px; }
+            .subtitle { font-size: 10px; margin-bottom: 8px; }
+            table { box-shadow: none; font-size: 9px; table-layout: fixed; width: 100%; }
+            th, td { padding: 4px 5px !important; word-wrap: normal !important; }
+            th { font-size: 9px; }
+            .feature-col { white-space: normal !important; }
+            .pain-point { font-size: 8px; margin-top: 1px; }
+            .category-head { padding: 5px 6px; font-size: 10px; }
+            .price-row { font-size: 10px; }
+            .roi-text { font-size: 8px; }
+            .tag-essential { font-size: 8px; }
+            /* 初级/中级/高级三列不换行，定制增选列允许换行以免出格 */
+            th:not(:first-child):not(:last-child), td:not(.feature-col):not(.custom-item) { white-space: nowrap !important; }
+            .custom-item { white-space: normal !important; font-size: 8px; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>B2B 批发与精细化仓储全链路操作系统</h1>
+    <p class="subtitle">—— 从集装箱到港到智能销量预测，管理您生意的每一个毛细血管</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 350px;">业务环节 / 核心功能 / 解决痛点</th>
+                <th>初级版 (Entry)<br>规范化管理</th>
+                <th>中级版 (Business)<br>数字化提效</th>
+                <th>高级版 (Flagship)<br>智能化协同</th>
+                <th>定制增选 (On-Demand)<br>专项研发 / 深度适配</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="price-row">
+                <td class="feature-col">一次性实施 / 开发费</td>
+                <td>€4,800</td>
+                <td>€6,800</td>
+                <td>€9,800</td>
+                <td rowspan="3" class="custom-item">按功能模块复杂度报价<br>(如深度库存建模、ERP联调)</td>
+            </tr>
+            <tr class="price-row">
+                <td class="feature-col">合计月费 (平台 + WMS)</td>
+                <td>€759</td>
+                <td>€1,099</td>
+                <td>€1,499</td>
+            </tr>
+            <tr class="price-row" style="color:#d35400; font-size: 13px;">
+                <td class="feature-col">财务价值对标 (ROI)</td>
+                <td><span class="roi-text">≈ 3个月人工成本</span></td>
+                <td><span class="roi-text">≈ 6个月人工成本</span></td>
+                <td><span class="roi-text">≈ 12个月人工成本</span></td>
+            </tr>
+
+            <tr><td colspan="5" class="category-head">环节一：供应链上游 - 到柜、卸柜与质检入库</td></tr>
+            <tr>
+                <td class="feature-col">
+                    在途“即将到柜”预报
+                    <span class="pain-point">痛点：不清楚到柜时间，仓库无法预留库位，导致卸货混乱</span>
+                </td>
+                <td>基础预计到达登记</td>
+                <td class="check">✔ 库位预分配</td>
+                <td class="check">✔ 船期/柜号追踪</td>
+                <td>—</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    卸柜分拣与盲收质检
+                    <span class="pain-point">痛点：卸柜时数量缺失、破损无法及时定责，入库即错</span>
+                </td>
+                <td>纸质签收录入</td>
+                <td class="check">✔ 卸柜破损登记</td>
+                <td class="check">✔ 数字化质检报告</td>
+                <td class="custom-item">★ PDA 快速盲拆扫码入库</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    库位/库房可视化管理
+                    <span class="pain-point">痛点：货架满了才知道没位子，或空位找不到货</span>
+                </td>
+                <td>基础货位编号</td>
+                <td>二维库位映射</td>
+                <td>二维库位映射</td>
+                <td class="custom-item">★ 实时动态库位图</td>
+            </tr>
+
+            <tr><td colspan="5" class="category-head">环节二：仓库日常 - 盘点、移仓与生命周期管理</td></tr>
+            <tr>
+                <td class="feature-col">
+                    多模式库存盘点
+                    <span class="pain-point">痛点：停工盘点损失大；不盘点则账实不符，下单无货</span>
+                </td>
+                <td>全场停工盘点</td>
+                <td class="check">✔ 循环/动销盘点</td>
+                <td class="check">✔ 盲盘对照系统</td>
+                <td class="custom-item">★ PDA 移动即时盘点</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    库内移仓与补货联动
+                    <span class="pain-point">痛点：高位库与拣货位脱节，拣货位空了员工手动补，效率低</span>
+                </td>
+                <td class="check">✔ 手动记录</td>
+                <td class="check">✔ 补货水位预警</td>
+                <td class="check">✔ 智能移仓指令</td>
+                <td>—</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    库存安全值与采购建议
+                    <span class="pain-point">痛点：凭经验采购，要么爆仓压资金，要么缺货失客户</span>
+                </td>
+                <td class="cross">✘</td>
+                <td class="check">✔ 固定安全水位预警</td>
+                <td class="check">✔ 一键生成采购建议</td>
+                <td class="custom-item">★ 算法级库存预测模型</td>
+            </tr>
+
+            <tr><td colspan="5" class="category-head">环节三：销售前端与物流闭环 - 订单转化与履约</td></tr>
+            <tr>
+                <td class="feature-col">
+                    <span class="tag-essential">标配</span>多级会员与分级定价
+                    <span class="pain-point">痛点：手动改价繁琐，不同地区/等级客户价格打架</span>
+                </td>
+                <td>3 个固定等级</td>
+                <td>无限等级/自动对价</td>
+                <td>一对一合同价格协议</td>
+                <td>—</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    <span class="tag-essential">标配</span>批发商注册审核流
+                    <span class="pain-point">痛点：防止同行套取批发底价，筛选优质客户</span>
+                </td>
+                <td class="check">✔ 标准表单</td>
+                <td class="check">✔ 标准表单</td>
+                <td class="check">✔ 自定义资质上传</td>
+                <td class="custom-item">★ 自动化信用评估</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    <span class="tag-essential">标配</span>批量订货表 Matrix Order
+                    <span class="pain-point">痛点：SKU多，客户一件件加购物车太慢，导致弃购</span>
+                </td>
+                <td>标准列表界面</td>
+                <td>支持 SKU 搜索与快录</td>
+                <td>支持表格导入一键下单</td>
+                <td>—</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    最小起订量 (MOQ) 控制
+                    <span class="pain-point">痛点：批发订单金额太小，物流与人工不合算</span>
+                </td>
+                <td class="check">✔ 全场/品类</td>
+                <td class="check">✔ 针对特定客户设置</td>
+                <td class="check">✔ 智能凑单提醒</td>
+                <td class="custom-item">★ 算法级智能推荐</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    信用额度与账期管理
+                    <span class="pain-point">痛点：大客户要求月结，财务手动对账难，坏账风险高</span>
+                </td>
+                <td class="cross">✘</td>
+                <td>授信额度控制</td>
+                <td>全自动对账/催款单</td>
+                <td>—</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    销售代表代客下单
+                    <span class="pain-point">痛点：线下展会或面谈，需要立即录单确认库存</span>
+                </td>
+                <td class="cross">✘</td>
+                <td class="check">✔ 手机端录单</td>
+                <td class="check">✔ 离线订单同步</td>
+                <td>—</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    客户关系管理 (CRM)
+                    <span class="pain-point">痛点：不知道哪些客户在流失，缺乏采购习惯分析</span>
+                </td>
+                <td>基础资料库</td>
+                <td class="check">✔ 采购偏好分析</td>
+                <td class="check">✔ 流失预警与激活</td>
+                <td>—</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    物流面单与自动化对接
+                    <span class="pain-point">痛点：要在不同快递系统录单，手动回传单号极慢</span>
+                </td>
+                <td class="cross">✘</td>
+                <td>手动导出 CSV</td>
+                <td>固定接口 1-2 家</td>
+                <td class="custom-item">★ 指定第三方物流API</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    PDA 扫码作业套件
+                    <span class="pain-point">痛点：人工清点错误率高，新员工上手慢</span>
+                </td>
+                <td class="cross">✘</td>
+                <td class="cross">✘</td>
+                <td class="cross">✘</td>
+                <td class="custom-item">★ PDA硬件+APP授权</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    波次拣货与效率优化
+                    <span class="pain-point">痛点：拣货员来回折返，单人处理单量有瓶颈</span>
+                </td>
+                <td class="cross">✘</td>
+                <td class="check">✔ 基础波次合并</td>
+                <td class="check">✔ 智能逻辑排序</td>
+                <td class="custom-item">★ 库位路径规划算法</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    批次管理与效期追踪
+                    <span class="pain-point">痛点：过期产品未及时卖出造成直接损耗</span>
+                </td>
+                <td class="check">✔ 基础登记</td>
+                <td class="check">✔ 到期自动预警</td>
+                <td class="check">✔ 自动锁定过期库存</td>
+                <td>—</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    库存精准同步 (多仓/多渠道)
+                    <span class="pain-point">痛点：线上线下库存不统一，超卖导致赔偿</span>
+                </td>
+                <td>单仓库同步</td>
+                <td>多仓库自动分配</td>
+                <td>全球路由/分仓策略</td>
+                <td>—</td>
+            </tr>
+
+            <tr><td colspan="5" class="category-head">环节四：系统底座与移动办公 - 随时随地的管理主权</td></tr>
+            <tr>
+                <td class="feature-col">
+                    <span class="tag-essential">标配</span>数据私有化与主权
+                    <span class="pain-point">痛点：数据留在美国公司 SaaS，资产不受控，无法二次开发</span>
+                </td>
+                <td class="check">✔ 独立服务器部署</td>
+                <td class="check">✔ 独立服务器部署</td>
+                <td class="check">✔ 独立服务器部署</td>
+                <td>—</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    移动端决策中心
+                    <span class="pain-point">痛点：老板不在电脑前就不知道生意情况，决策严重滞后</span>
+                </td>
+                <td>标准自适应网页</td>
+                <td class="check">✔ 微信/手机端管理助手</td>
+                <td class="check">✔ 自动推送日报/周报</td>
+                <td class="custom-item">★ 深度定制移动端 App</td>
+            </tr>
+            <tr>
+                <td class="feature-col">
+                    ERP / 报表系统对接
+                    <span class="pain-point">痛点：业务数据与财务数据割裂，形成信息孤岛</span>
+                </td>
+                <td>Excel 导出</td>
+                <td>标准 API 接口</td>
+                <td>内置多维度决策报表</td>
+                <td class="custom-item">★ 指定第三方/深度 ERP 联调</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div style="margin-top: 25px; padding: 20px; background: #fff; border: 2px solid #2c3e50;">
+        <strong>新增高级定制模块说明 (Optional Add-ons):</strong>
+        <ul style="font-size: 13px; color: #34495e;">
+            <li><strong>智能库存预测：</strong>根据历史销量、季节性波动、采购周期，自动计算“不丢单、不爆仓”的最佳库存模型。</li>
+            <li><strong>移动端数字化看板：</strong>为老板定制每日“经营日报”，早晨 9:00 自动推送到手机，含销量、欠款、到柜、库存预警等核心数据。</li>
+            <li><strong>全流程 PDA 覆盖：</strong>从集装箱卸货开始，所有环节（入、盘、移、拣、发）全扫码化。</li>
+        </ul>
+    </div>
+
+</body>
+</html>

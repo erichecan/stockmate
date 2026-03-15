@@ -1,0 +1,85 @@
+# StockFlow - 仅部署 Backend（增量部署，约 3-5 分钟）
+# Updated: 2026-02-28T17:30:00
+# 用法: ./scripts/deploy-backend.sh  或  gcloud builds submit --config=cloudbuild-backend.yaml
+
+substitutions:
+  _REGION: us-central1
+  _BACKEND_SERVICE: stockmate-api
+
+steps:
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: ensure-repo
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud artifacts repositories describe cloud-run-source-deploy --location=${_REGION} 2>/dev/null || \
+        gcloud artifacts repositories create cloud-run-source-deploy --repository-format=docker --location=${_REGION}
+
+  # 拉取上次镜像作缓存（首次构建会失败，忽略）
+  - name: gcr.io/cloud-builders/docker
+    id: pull-cache
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:latest || true
+    waitFor: ['ensure-repo']
+
+  - name: gcr.io/cloud-builders/docker
+    id: build-backend
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker build --cache-from ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:latest \
+          -t ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${BUILD_ID} \
+          -t ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:latest \
+          -f backend/Dockerfile .
+    dir: .
+    waitFor: ['pull-cache']
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-backend
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${BUILD_ID}
+    waitFor: ['build-backend']
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-latest
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:latest
+    waitFor: ['build-backend']
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-backend
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        EXTRA=""
+        if [ -n "${_ENV_DATABASE_URL}" ]; then
+          printf 'DATABASE_URL: "%s"\nJWT_ACCESS_SECRET: "%s"\nJWT_REFRESH_SECRET: "%s"\nCORS_ORIGIN: "%s"\n' \
+            "${_ENV_DATABASE_URL}" "${_ENV_JWT_ACCESS}" "${_ENV_JWT_REFRESH}" "${_ENV_CORS}" > /tmp/env.yaml
+          EXTRA="--env-vars-file=/tmp/env.yaml"
+        fi
+        gcloud run deploy ${_BACKEND_SERVICE} \
+          --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${BUILD_ID} \
+          --region=${_REGION} --platform=managed --allow-unauthenticated --port=3001 \
+          $$EXTRA
+    waitFor: ['push-backend']
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: iam-backend
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - add-iam-policy-binding
+      - ${_BACKEND_SERVICE}
+      - --region=${_REGION}
+      - --member=allUsers
+      - --role=roles/run.invoker
+    waitFor: ['deploy-backend']

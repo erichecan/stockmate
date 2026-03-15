@@ -1,5 +1,7 @@
 # StockFlow GCP Cloud Build - 部署 Backend + Frontend 到 Cloud Run
-# Updated: 2026-02-28T16:00:00
+# Updated: 2026-02-26T16:12:00 - 修复本地 submit 时 SHORT_SHA 为空导致 tag 无效
+# 原因：gcloud builds submit 不触发时 SHORT_SHA 为空，tag 变成 "stockmate-api:" 无效
+# 解决：使用 BUILD_ID（每次构建都有）
 #
 # 使用方法:
 #   gcloud builds submit --config=cloudbuild.yaml --project=stockmate-488805
@@ -37,7 +39,7 @@ steps:
     args:
       - build
       - -t
-      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${SHORT_SHA}
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${BUILD_ID}
       - -f
       - backend/Dockerfile
       - .
@@ -48,27 +50,42 @@ steps:
     id: push-backend
     args:
       - push
-      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${SHORT_SHA}
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${BUILD_ID}
     waitFor: ['build-backend']
 
   # 3. 部署 Backend 到 Cloud Run
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-backend
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        # Updated: 2026-02-26T16:15:00 - 支持从 substitutions 注入 env（用 env 文件避免 URL 特殊字符）
+        EXTRA=""
+        if [ -n "${_ENV_DATABASE_URL}" ]; then
+          printf 'DATABASE_URL: "%s"\nJWT_ACCESS_SECRET: "%s"\nJWT_REFRESH_SECRET: "%s"\nCORS_ORIGIN: "%s"\n' \
+            "${_ENV_DATABASE_URL}" "${_ENV_JWT_ACCESS}" "${_ENV_JWT_REFRESH}" "${_ENV_CORS}" > /tmp/env.yaml
+          EXTRA="--env-vars-file=/tmp/env.yaml"
+        fi
+        gcloud run deploy ${_BACKEND_SERVICE} \
+          --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${BUILD_ID} \
+          --region=${_REGION} --platform=managed --allow-unauthenticated --port=3001 \
+          $$EXTRA
+    waitFor: ['push-backend']
+
+  # 3b. 确保 Backend 允许匿名访问（--allow-unauthenticated 需配合 IAM）
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: iam-backend
     entrypoint: gcloud
     args:
       - run
-      - deploy
+      - services
+      - add-iam-policy-binding
       - ${_BACKEND_SERVICE}
-      - --image
-      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_BACKEND_SERVICE}:${SHORT_SHA}
-      - --region
-      - ${_REGION}
-      - --platform
-      - managed
-      - --allow-unauthenticated
-      - --port
-      - "3001"
-    waitFor: ['push-backend']
+      - --region=${_REGION}
+      - --member=allUsers
+      - --role=roles/run.invoker
+    waitFor: ['deploy-backend']
 
   # 4. 获取 Backend URL (用于 Frontend 构建)
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -89,7 +106,7 @@ steps:
       - -c
       - |
         API_URL=$$(cat backend_url.txt)/api
-        docker build --build-arg NEXT_PUBLIC_API_URL=$$API_URL -t ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${SHORT_SHA} -f frontend/Dockerfile .
+        docker build --build-arg NEXT_PUBLIC_API_URL=$$API_URL -t ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${BUILD_ID} -f frontend/Dockerfile .
     dir: .
     waitFor: ['get-backend-url']
 
@@ -98,7 +115,7 @@ steps:
     id: push-frontend
     args:
       - push
-      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${SHORT_SHA}
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${BUILD_ID}
     waitFor: ['build-frontend']
 
   # 7. 部署 Frontend 到 Cloud Run
@@ -110,7 +127,7 @@ steps:
       - deploy
       - ${_FRONTEND_SERVICE}
       - --image
-      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${SHORT_SHA}
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_FRONTEND_SERVICE}:${BUILD_ID}
       - --region
       - ${_REGION}
       - --platform
@@ -119,3 +136,17 @@ steps:
       - --port
       - "3000"
     waitFor: ['push-frontend']
+
+  # 7b. 确保 Frontend 允许匿名访问
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: iam-frontend
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - add-iam-policy-binding
+      - ${_FRONTEND_SERVICE}
+      - --region=${_REGION}
+      - --member=allUsers
+      - --role=roles/run.invoker
+    waitFor: ['deploy-frontend']

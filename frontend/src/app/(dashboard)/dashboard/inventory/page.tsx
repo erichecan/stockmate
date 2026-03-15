@@ -1,9 +1,10 @@
-// Updated: 2026-02-28T10:10:00
+// Updated: 2026-03-14 - Phase 3: 库位列表 + 库存列表 双 Tab
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import {
   PackageSearch,
+  MapPin,
   ArrowDownToLine,
   ArrowUpFromLine,
   ArrowLeftRight,
@@ -228,9 +229,16 @@ function SkuCombobox({
 // ─── Main Component ───────────────────────────────────────────
 
 export default function InventoryPage() {
-  const [activeTab, setActiveTab] = useState('inventory');
+  const [activeTab, setActiveTab] = useState('location');
 
-  // Inventory tab state
+  // 库位列表 Tab state
+  const [locationData, setLocationData] = useState<InventoryItem[]>([]);
+  const [locationTotal, setLocationTotal] = useState(0);
+  const [locationPage, setLocationPage] = useState(1);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationWarehouseFilter, setLocationWarehouseFilter] = useState<string>('all');
+
+  // 库存列表 Tab state
   const [inventoryData, setInventoryData] = useState<InventoryItem[]>([]);
   const [inventoryTotal, setInventoryTotal] = useState(0);
   const [inventoryPage, setInventoryPage] = useState(1);
@@ -335,7 +343,32 @@ export default function InventoryPage() {
     }
   }, [outboundWarehouseId, fetchBins]);
 
-  // ─── Fetch Inventory ───
+  // ─── Fetch 库位列表 (by-location) ───
+
+  const fetchLocation = useCallback(async () => {
+    setLocationLoading(true);
+    try {
+      const { data } = await api.get<{ data: InventoryItem[]; total: number }>('/inventory/by-location', {
+        params: {
+          warehouseId: locationWarehouseFilter === 'all' ? undefined : locationWarehouseFilter,
+          page: locationPage,
+          limit: PAGE_SIZE,
+        },
+      });
+      setLocationData(data?.data ?? []);
+      setLocationTotal(data?.total ?? 0);
+    } catch {
+      toast.error('获取库位列表失败');
+    } finally {
+      setLocationLoading(false);
+    }
+  }, [locationWarehouseFilter, locationPage]);
+
+  useEffect(() => {
+    if (activeTab === 'location') fetchLocation();
+  }, [activeTab, fetchLocation]);
+
+  // ─── Fetch 库存列表 ───
 
   const fetchInventory = useCallback(async () => {
     setInventoryLoading(true);
@@ -549,6 +582,7 @@ export default function InventoryPage() {
 
   // ─── Pagination ───
 
+  const locationTotalPages = Math.max(1, Math.ceil(locationTotal / PAGE_SIZE));
   const inventoryTotalPages = Math.max(1, Math.ceil(inventoryTotal / PAGE_SIZE));
   const ledgerTotalPages = Math.max(1, Math.ceil(ledgerTotal / PAGE_SIZE));
 
@@ -604,13 +638,108 @@ export default function InventoryPage() {
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
+              <TabsTrigger value="location">
+                <MapPin className="h-4 w-4 mr-1" />
+                库位列表
+              </TabsTrigger>
               <TabsTrigger value="inventory">
                 <PackageSearch className="h-4 w-4 mr-1" />
-                库存台账
+                库存列表
               </TabsTrigger>
               <TabsTrigger value="ledger">操作日志</TabsTrigger>
             </TabsList>
 
+            {/* 库位列表 Tab：按货位维度，调用 GET /inventory/by-location */}
+            <TabsContent value="location" className="space-y-4 mt-4">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label>仓库</Label>
+                  <Select value={locationWarehouseFilter} onValueChange={setLocationWarehouseFilter}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="全部仓库" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部仓库</SelectItem>
+                      {warehouses.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.name} ({w.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {locationLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>仓库</TableHead>
+                        <TableHead>货位</TableHead>
+                        <TableHead>SKU编码</TableHead>
+                        <TableHead>商品名称</TableHead>
+                        <TableHead>可用数量</TableHead>
+                        <TableHead>锁定数量</TableHead>
+                        <TableHead>总数量</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {locationData.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                            暂无库位库存数据
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        locationData.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>{item.warehouse.name} ({item.warehouse.code})</TableCell>
+                            <TableCell>{item.binLocation?.code ?? '-'}</TableCell>
+                            <TableCell>{item.sku.code}</TableCell>
+                            <TableCell>{item.sku.product.name}</TableCell>
+                            <TableCell>{item.quantity - item.lockedQty}</TableCell>
+                            <TableCell>{item.lockedQty}</TableCell>
+                            <TableCell>{item.quantity}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      共 {locationTotal} 条
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        onClick={() => setLocationPage((p) => Math.max(1, p - 1))}
+                        disabled={locationPage <= 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm">
+                        {locationPage} / {locationTotalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        onClick={() => setLocationPage((p) => Math.min(locationTotalPages, p + 1))}
+                        disabled={locationPage >= locationTotalPages}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </TabsContent>
+
+            {/* 库存列表 Tab：按 SKU/库存维度，调用 GET /inventory */}
             <TabsContent value="inventory" className="space-y-4 mt-4">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">

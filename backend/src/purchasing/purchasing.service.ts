@@ -1,11 +1,14 @@
-// Updated: 2026-02-28T10:00:00
+// Updated: 2026-03-14 - 阶段二收货 6 状态/6 Tab + 操作日志
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { POStatus, ReceiptStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ActionLogService } from '../action-log/action-log.service';
+import { InventoryService } from '../inventory/inventory.service';
 import { PaginatedResponseDto } from '../common/dto/pagination.dto';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
@@ -13,11 +16,25 @@ import { CreateShipmentDto } from './dto/create-shipment.dto';
 import { UpdateShipmentDto } from './dto/update-shipment.dto';
 import { CreatePackingListItemDto } from './dto/create-packing-list-item.dto';
 import { CreateReceiptDto } from './dto/create-receipt.dto';
-import { POStatus } from '@prisma/client';
+import { PutawayCompleteDto } from './dto/receipt-phase-actions.dto';
+
+/** 前端 Tab 阶段与 ReceiptStatus 映射（兼容旧值 PENDING/IN_PROGRESS） */
+export const RECEIPT_PHASE_STATUS_MAP: Record<string, ReceiptStatus[]> = {
+  NOTICE: [],
+  PENDING_ARRIVAL: [ReceiptStatus.PENDING_ARRIVAL, ReceiptStatus.PENDING],
+  ARRIVED: [ReceiptStatus.ARRIVED, ReceiptStatus.IN_PROGRESS],
+  UNLOADED: [ReceiptStatus.UNLOADED],
+  SORTED: [ReceiptStatus.SORTED],
+  COMPLETED: [ReceiptStatus.COMPLETED],
+};
 
 @Injectable()
 export class PurchasingService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private actionLogService: ActionLogService,
+    private inventoryService: InventoryService,
+  ) {}
 
   /** Generate order number: PO-YYYYMMDD-XXXX */
   private async generateOrderNumber(tenantId: string): Promise<string> {
@@ -47,11 +64,11 @@ export class PurchasingService {
 
   // ==================== Purchase Orders ====================
 
-  async createPO(tenantId: string, dto: CreatePurchaseOrderDto) {
+  async createPO(tenantId: string, userId: string, dto: CreatePurchaseOrderDto) {
     const orderNumber = await this.generateOrderNumber(tenantId);
 
-    return this.prisma.$transaction(async (tx) => {
-      const po = await tx.purchaseOrder.create({
+    const po = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.purchaseOrder.create({
         data: {
           orderNumber,
           tenantId,
@@ -67,7 +84,7 @@ export class PurchasingService {
         totalAmount += lineTotal;
         await tx.purchaseOrderItem.create({
           data: {
-            purchaseOrderId: po.id,
+            purchaseOrderId: created.id,
             skuId: item.skuId,
             quantity: item.quantity,
             unitPrice: new Prisma.Decimal(item.unitPrice),
@@ -76,7 +93,7 @@ export class PurchasingService {
       }
 
       return tx.purchaseOrder.update({
-        where: { id: po.id },
+        where: { id: created.id },
         data: { totalAmount: new Prisma.Decimal(totalAmount) },
         include: {
           supplier: true,
@@ -84,6 +101,16 @@ export class PurchasingService {
         },
       });
     });
+
+    await this.actionLogService.create({
+      tenantId,
+      userId,
+      action: 'create',
+      entityType: 'PurchaseOrder',
+      entityId: po.id,
+      payload: { orderNumber: po.orderNumber, supplierId: dto.supplierId },
+    });
+    return po;
   }
 
   async findAllPOs(
@@ -125,7 +152,7 @@ export class PurchasingService {
     return po;
   }
 
-  async updatePO(id: string, tenantId: string, dto: UpdatePurchaseOrderDto) {
+  async updatePO(id: string, tenantId: string, userId: string, dto: UpdatePurchaseOrderDto) {
     await this.findOnePO(id, tenantId);
 
     const data: Record<string, unknown> = { ...dto };
@@ -133,7 +160,7 @@ export class PurchasingService {
       data.expectedAt = new Date(dto.expectedAt);
     }
 
-    return this.prisma.purchaseOrder.update({
+    const updated = await this.prisma.purchaseOrder.update({
       where: { id },
       data,
       include: {
@@ -141,15 +168,35 @@ export class PurchasingService {
         items: { include: { sku: { include: { product: true } } } },
       },
     });
+
+    await this.actionLogService.create({
+      tenantId,
+      userId,
+      action: 'update',
+      entityType: 'PurchaseOrder',
+      entityId: id,
+      payload: dto as Prisma.InputJsonValue,
+    });
+    return updated;
   }
 
-  async cancelPO(id: string, tenantId: string) {
-    await this.findOnePO(id, tenantId);
-    return this.prisma.purchaseOrder.update({
+  async cancelPO(id: string, tenantId: string, userId: string) {
+    const po = await this.findOnePO(id, tenantId);
+    const updated = await this.prisma.purchaseOrder.update({
       where: { id },
       data: { status: POStatus.CANCELLED },
       include: { supplier: true },
     });
+
+    await this.actionLogService.create({
+      tenantId,
+      userId,
+      action: 'cancel',
+      entityType: 'PurchaseOrder',
+      entityId: id,
+      payload: { orderNumber: po.orderNumber },
+    });
+    return updated;
   }
 
   // ==================== Shipments ====================
@@ -241,7 +288,7 @@ export class PurchasingService {
 
   // ==================== Receipts ====================
 
-  async createReceipt(tenantId: string, dto: CreateReceiptDto) {
+  async createReceipt(tenantId: string, userId: string, dto: CreateReceiptDto) {
     const po = await this.prisma.purchaseOrder.findFirst({
       where: { id: dto.purchaseOrderId, tenantId },
       include: { items: true },
@@ -253,8 +300,8 @@ export class PurchasingService {
     const receiptNumber = await this.generateReceiptNumber(tenantId);
     const poItemMap = new Map(po.items.map((i) => [i.id, i]));
 
-    return this.prisma.$transaction(async (tx) => {
-      const receipt = await tx.purchaseReceipt.create({
+    const receipt = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.purchaseReceipt.create({
         data: {
           receiptNumber,
           purchaseOrderId: dto.purchaseOrderId,
@@ -278,7 +325,7 @@ export class PurchasingService {
 
         await tx.receiptItem.create({
           data: {
-            receiptId: receipt.id,
+            receiptId: created.id,
             poItemId: item.poItemId,
             expectedQty: poItem.quantity,
             receivedQty: item.receivedQty,
@@ -297,13 +344,25 @@ export class PurchasingService {
       }
 
       return tx.purchaseReceipt.findUnique({
-        where: { id: receipt.id },
+        where: { id: created.id },
         include: {
           purchaseOrder: true,
           items: { include: { poItem: true } },
         },
       });
     });
+
+    if (receipt) {
+      await this.actionLogService.create({
+        tenantId,
+        userId,
+        action: 'create',
+        entityType: 'PurchaseReceipt',
+        entityId: receipt.id,
+        payload: { receiptNumber: receipt.receiptNumber, purchaseOrderId: dto.purchaseOrderId },
+      });
+    }
+    return receipt;
   }
 
   async findReceipts(tenantId: string, purchaseOrderId?: string) {
@@ -313,5 +372,136 @@ export class PurchasingService {
       orderBy: { createdAt: 'desc' },
       include: { purchaseOrder: true, items: { include: { poItem: true } } },
     });
+  }
+
+  // ==================== 阶段二：按阶段分页查询收货列表（6 Tab）====================
+  // 2026-03-14 参考 ModernWMS Asnmaster/list
+
+  async listReceiptsByPhase(
+    tenantId: string,
+    phase: string,
+    page: number,
+    limit: number,
+  ) {
+    const statuses = RECEIPT_PHASE_STATUS_MAP[phase];
+    const where: Prisma.PurchaseReceiptWhereInput = { tenantId };
+    if (phase === 'NOTICE') {
+      where.status = { not: ReceiptStatus.CANCELLED };
+    } else if (statuses?.length) {
+      where.status = { in: statuses };
+    } else {
+      where.status = { not: ReceiptStatus.CANCELLED };
+    }
+
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      this.prisma.purchaseReceipt.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          purchaseOrder: { include: { supplier: true } },
+          items: { include: { poItem: { include: { sku: { include: { product: true } } } } } },
+        },
+      }),
+      this.prisma.purchaseReceipt.count({ where }),
+    ]);
+    return new PaginatedResponseDto(data, total, page, limit);
+  }
+
+  /** 确认到货：PENDING_ARRIVAL/PENDING -> ARRIVED，设置 receivedAt */
+  async confirmArrival(tenantId: string, receiptIds: string[]) {
+    const statusIn = [ReceiptStatus.PENDING_ARRIVAL, ReceiptStatus.PENDING];
+    const receipts = await this.prisma.purchaseReceipt.findMany({
+      where: { id: { in: receiptIds }, tenantId, status: { in: statusIn } },
+    });
+    if (receipts.length !== receiptIds.length) {
+      throw new BadRequestException('部分收货单状态不允许确认到货或不存在');
+    }
+    await this.prisma.purchaseReceipt.updateMany({
+      where: { id: { in: receiptIds }, tenantId },
+      data: { status: ReceiptStatus.ARRIVED, receivedAt: new Date() },
+    });
+    return { updated: receiptIds.length };
+  }
+
+  /** 确认卸货：ARRIVED/IN_PROGRESS -> UNLOADED */
+  async confirmUnload(tenantId: string, receiptIds: string[]) {
+    const statusIn = [ReceiptStatus.ARRIVED, ReceiptStatus.IN_PROGRESS];
+    const receipts = await this.prisma.purchaseReceipt.findMany({
+      where: { id: { in: receiptIds }, tenantId, status: { in: statusIn } },
+    });
+    if (receipts.length !== receiptIds.length) {
+      throw new BadRequestException('部分收货单状态不允许确认卸货或不存在');
+    }
+    await this.prisma.purchaseReceipt.updateMany({
+      where: { id: { in: receiptIds }, tenantId },
+      data: { status: ReceiptStatus.UNLOADED },
+    });
+    return { updated: receiptIds.length };
+  }
+
+  /** 分拣完成：UNLOADED -> SORTED */
+  async sortingComplete(tenantId: string, receiptIds: string[]) {
+    const receipts = await this.prisma.purchaseReceipt.findMany({
+      where: { id: { in: receiptIds }, tenantId, status: ReceiptStatus.UNLOADED },
+    });
+    if (receipts.length !== receiptIds.length) {
+      throw new BadRequestException('部分收货单状态不允许分拣完成或不存在');
+    }
+    await this.prisma.purchaseReceipt.updateMany({
+      where: { id: { in: receiptIds }, tenantId },
+      data: { status: ReceiptStatus.SORTED },
+    });
+    return { updated: receiptIds.length };
+  }
+
+  /** 上架完成：调用 inventory.inbound 按明细入库，SORTED -> COMPLETED */
+  async putawayComplete(
+    tenantId: string,
+    userId: string,
+    receiptId: string,
+    dto: PutawayCompleteDto,
+  ) {
+    const receipt = await this.prisma.purchaseReceipt.findFirst({
+      where: { id: receiptId, tenantId, status: ReceiptStatus.SORTED },
+      include: {
+        items: {
+          include: { poItem: { include: { sku: true } } },
+        },
+      },
+    });
+    if (!receipt) {
+      throw new NotFoundException('收货单不存在或状态不是待上架');
+    }
+    const itemBinMap = new Map<string, string | undefined>();
+    if (dto.items?.length) {
+      for (const it of dto.items) {
+        if (it.receiptItemId) {
+          itemBinMap.set(it.receiptItemId, it.binLocationId);
+        }
+      }
+    }
+    for (const item of receipt.items) {
+      const skuId = item.poItem.skuId;
+      const qty = item.receivedQty;
+      if (qty <= 0) continue;
+      const binLocationId = itemBinMap.get(item.id);
+      await this.inventoryService.inbound(tenantId, userId, {
+        skuId,
+        warehouseId: dto.warehouseId,
+        binLocationId,
+        quantity: qty,
+        referenceType: 'PURCHASE_RECEIPT',
+        referenceId: receiptId,
+        notes: `收货单 ${receipt.receiptNumber}`,
+      });
+    }
+    await this.prisma.purchaseReceipt.update({
+      where: { id: receiptId },
+      data: { status: ReceiptStatus.COMPLETED },
+    });
+    return { receiptId, completed: true };
   }
 }

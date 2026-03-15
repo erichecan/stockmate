@@ -1,12 +1,15 @@
-// Updated: 2026-02-26T23:15:00
+// Updated: 2026-03-14T18:15:00 - 批发站 P0: 新增 /auth/wholesale/login 入口
 import {
   Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
+  InternalServerErrorException,
+  Logger,
   Post,
 } from '@nestjs/common';
+import { HttpException } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -22,6 +25,8 @@ import { Public } from '../common/decorators/public.decorator';
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private authService: AuthService) {}
 
   @Public()
@@ -37,6 +42,26 @@ export class AuthController {
       dto.tenantSlug?.trim(),
     );
     return this.authService.login(user);
+  }
+
+  @Public()
+  @Post('wholesale/login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Wholesale customer login' })
+  @ApiResponse({ status: 200, description: 'Login successful' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  async wholesaleLogin(@Body() dto: LoginDto) {
+    try {
+      return await this.authService.wholesaleLogin(dto);
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`wholesale/login 500: ${message}`, err instanceof Error ? err.stack : undefined);
+      throw new InternalServerErrorException({
+        message: '登录服务异常',
+        detail: message,
+      });
+    }
   }
 
   @Public()

@@ -31,22 +31,41 @@
 | `DATABASE_URL` | Neon Postgres 连接串 (必填) |
 | `JWT_ACCESS_SECRET` | JWT  access 密钥 |
 | `JWT_REFRESH_SECRET` | JWT refresh 密钥 |
-| `CORS_ORIGIN` | 前端 URL，逗号分隔，如 `https://stockmate-web-xxx.run.app` |
+| `CORS_ORIGIN` | 前端 URL，逗号分隔，如 `https://stockmate-web-xxx.run.app,https://stockmate-wholesale-xxx.run.app` |
 
 ### Frontend
 
 `NEXT_PUBLIC_API_URL` 在构建时由 Cloud Build 自动注入（指向 Backend URL + `/api`）。
 
+### 批发站前台（独立服务 stockmate-wholesale）
+
+构建时自动注入：`NEXT_PUBLIC_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_AUTH`（指向 Backend URL）。部署后需将批发站 URL 加入 Backend 的 `CORS_ORIGIN`。
+
 ## 三、部署方式
 
-### 方式 A：手动部署（本地提交）
+### 增量部署（推荐，单次约 3-6 分钟）
+
+按需部署，避免每次全量 15 分钟：
 
 ```bash
-# 若遇 bucket forbidden，先运行: ./scripts/fix-gcp-permissions.sh
-gcloud builds submit --config=cloudbuild.yaml --project=stockmate-488805
+# 仅 Backend 有改动时（约 3-5 分钟，含 Docker 层缓存）
+./scripts/deploy-backend.sh
+
+# 仅 Frontend 有改动时（约 4-6 分钟，从已部署 Backend 取 URL）
+./scripts/deploy-frontend.sh
+
+# 仅批发站前台有改动时（约 5-8 分钟，独立服务 stockmate-wholesale）
+./scripts/deploy-wholesale.sh
 ```
 
-### 方式 B：自动部署（GitHub Trigger，推荐）
+### 全量部署（Backend + Frontend 一起，约 15 分钟）
+
+```bash
+# 需在 backend/.env 中配置 DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET
+./scripts/deploy.sh
+```
+
+### 方式 C：自动部署（GitHub Trigger）
 
 Push 到 `main` 即自动部署，无需本地提交。
 
@@ -59,11 +78,12 @@ Push 到 `main` 即自动部署，无需本地提交。
 部署完成后会输出：
 - Backend: `https://stockmate-api-xxx-uc.a.run.app`
 - Frontend: `https://stockmate-web-xxx-uc.a.run.app`
+- 批发站前台: `https://stockmate-wholesale-xxx-uc.a.run.app`（独立服务，需单独执行 `./scripts/deploy-wholesale.sh`）
 
 ## 四、首次部署后
 
-1. 在 Cloud Run → stockmate-api → 编辑 → 变量中添加 `DATABASE_URL`、`JWT_*`、`CORS_ORIGIN`
-2. `CORS_ORIGIN` 填 Frontend 的完整 URL（如 `https://stockmate-web-xxx.run.app`）
+1. 若用 `./scripts/deploy.sh`，`backend/.env` 中的 `CORS_ORIGIN` 应包含 Frontend URL（如 `https://stockmate-web-xxx.run.app`），部署后 Frontend 才能正常调用 API
+2. 或在 Cloud Run → stockmate-api → 编辑 → 变量中手动添加/更新 `CORS_ORIGIN`
 3. 数据库迁移（可选，若未在部署流程中执行）：
    ```bash
    cd backend && npx prisma migrate deploy

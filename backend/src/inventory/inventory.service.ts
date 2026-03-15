@@ -1,8 +1,9 @@
-// Updated: 2026-02-28T10:00:00
+// Updated: 2026-03-14 - 阶段一：操作日志打点
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { LedgerType } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ActionLogService } from '../action-log/action-log.service';
 import { PaginatedResponseDto } from '../common/dto/pagination.dto';
 import { InboundDto } from './dto/inbound.dto';
 import { OutboundDto } from './dto/outbound.dto';
@@ -24,11 +25,20 @@ const LEDGER_INCLUDE = {
 
 @Injectable()
 export class InventoryService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private actionLogService: ActionLogService,
+  ) {}
 
   async getInventory(
     tenantId: string,
-    query: { skuId?: string; warehouseId?: string; page?: number; limit?: number },
+    query: {
+      skuId?: string;
+      warehouseId?: string;
+      binLocationId?: string;
+      page?: number;
+      limit?: number;
+    },
   ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
@@ -37,6 +47,7 @@ export class InventoryService {
     const where: Prisma.InventoryItemWhereInput = { tenantId };
     if (query.skuId) where.skuId = query.skuId;
     if (query.warehouseId) where.warehouseId = query.warehouseId;
+    if (query.binLocationId) where.binLocationId = query.binLocationId;
 
     const [data, total] = await Promise.all([
       this.prisma.inventoryItem.findMany({
@@ -44,7 +55,37 @@ export class InventoryService {
         skip,
         take: limit,
         include: INVENTORY_INCLUDE,
-        orderBy: [{ warehouseId: 'asc' }, { skuId: 'asc' }],
+        orderBy: [{ warehouseId: 'asc' }, { binLocationId: 'asc' }, { skuId: 'asc' }],
+      }),
+      this.prisma.inventoryItem.count({ where }),
+    ]);
+
+    return new PaginatedResponseDto(data, total, page, limit);
+  }
+
+  /**
+   * 库位列表：按货位维度分页查询，支持 warehouseId 筛选。
+   * 返回与 getInventory 相同的行结构（每行 = 某货位下某 SKU 的库存），
+   * 排序按 仓库 -> 货位 -> SKU，便于前端按库位维度展示。
+   */
+  async getInventoryByLocation(
+    tenantId: string,
+    query: { warehouseId?: string; page?: number; limit?: number },
+  ) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.InventoryItemWhereInput = { tenantId };
+    if (query.warehouseId) where.warehouseId = query.warehouseId;
+
+    const [data, total] = await Promise.all([
+      this.prisma.inventoryItem.findMany({
+        where,
+        skip,
+        take: limit,
+        include: INVENTORY_INCLUDE,
+        orderBy: [{ warehouseId: 'asc' }, { binLocationId: 'asc' }, { skuId: 'asc' }],
       }),
       this.prisma.inventoryItem.count({ where }),
     ]);
@@ -118,6 +159,14 @@ export class InventoryService {
       });
     });
 
+    await this.actionLogService.create({
+      tenantId,
+      userId,
+      action: 'inbound',
+      entityType: 'InventoryItem',
+      entityId: dto.skuId,
+      payload: { skuId: dto.skuId, warehouseId: dto.warehouseId, quantity: dto.quantity },
+    });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }
 
@@ -165,6 +214,14 @@ export class InventoryService {
       });
     });
 
+    await this.actionLogService.create({
+      tenantId,
+      userId,
+      action: 'outbound',
+      entityType: 'InventoryItem',
+      entityId: dto.skuId,
+      payload: { skuId: dto.skuId, warehouseId: dto.warehouseId, quantity: dto.quantity },
+    });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }
 
@@ -214,6 +271,14 @@ export class InventoryService {
       });
     });
 
+    await this.actionLogService.create({
+      tenantId,
+      userId,
+      action: 'adjust',
+      entityType: 'InventoryItem',
+      entityId: dto.skuId,
+      payload: { skuId: dto.skuId, warehouseId: dto.warehouseId, quantity: dto.quantity },
+    });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }
 
@@ -303,6 +368,19 @@ export class InventoryService {
       });
     });
 
+    await this.actionLogService.create({
+      tenantId,
+      userId,
+      action: 'transfer',
+      entityType: 'InventoryItem',
+      entityId: dto.skuId,
+      payload: {
+        skuId: dto.skuId,
+        fromWarehouseId: dto.fromWarehouseId,
+        toWarehouseId: dto.toWarehouseId,
+        quantity: dto.quantity,
+      },
+    });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }
 
@@ -355,6 +433,14 @@ export class InventoryService {
       });
     });
 
+    await this.actionLogService.create({
+      tenantId,
+      userId,
+      action: 'lock',
+      entityType: 'InventoryItem',
+      entityId: dto.skuId,
+      payload: { skuId: dto.skuId, warehouseId: dto.warehouseId, quantity: dto.quantity },
+    });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }
 
@@ -403,6 +489,14 @@ export class InventoryService {
       });
     });
 
+    await this.actionLogService.create({
+      tenantId,
+      userId,
+      action: 'unlock',
+      entityType: 'InventoryItem',
+      entityId: dto.skuId,
+      payload: { skuId: dto.skuId, warehouseId: dto.warehouseId, quantity: dto.quantity },
+    });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }
 
@@ -412,6 +506,7 @@ export class InventoryService {
       skuId?: string;
       warehouseId?: string;
       type?: LedgerType;
+      referenceType?: string;
       startDate?: string;
       endDate?: string;
       page?: number;
@@ -426,6 +521,7 @@ export class InventoryService {
     if (query.skuId) where.skuId = query.skuId;
     if (query.warehouseId) where.warehouseId = query.warehouseId;
     if (query.type) where.type = query.type;
+    if (query.referenceType) where.referenceType = query.referenceType;
     if (query.startDate || query.endDate) {
       where.createdAt = {};
       if (query.startDate) where.createdAt.gte = new Date(query.startDate);

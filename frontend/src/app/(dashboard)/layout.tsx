@@ -18,10 +18,18 @@ import {
   Truck,
   Warehouse,
   ShoppingCart,
+  PackageCheck,
   PackageSearch,
   QrCode,
   Users,
   FileText,
+  Lock,
+  Scale,
+  ArrowRightLeft,
+  Cog,
+  ClipboardCheck,
+  UserCircle,
+  Printer,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -46,20 +54,28 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// Updated: 2026-02-28T10:05:00
+// Updated: 2026-03-14 - 阶段一：基础设置分组，对照 ModernWMS baseModule 侧栏
 const navItems = [
   { href: '/dashboard', label: '仪表盘', icon: LayoutDashboard, group: '概览' },
-  { href: '/dashboard/products', label: '产品', icon: Package, group: '商品' },
-  { href: '/dashboard/categories', label: '分类', icon: FolderTree, group: '商品' },
-  { href: '/dashboard/brands', label: '品牌', icon: Tag, group: '商品' },
-  { href: '/dashboard/skus', label: 'SKU', icon: Barcode, group: '商品' },
-  { href: '/dashboard/suppliers', label: '供应商', icon: Truck, group: '采购' },
+  { href: '/dashboard/customers', label: '客户', icon: Users, group: '基础设置' },
+  { href: '/dashboard/suppliers', label: '供应商', icon: Truck, group: '基础设置' },
+  { href: '/dashboard/warehouses', label: '仓库', icon: Warehouse, group: '基础设置' },
+  { href: '/dashboard/categories', label: '分类', icon: FolderTree, group: '基础设置' },
+  { href: '/dashboard/brands', label: '品牌', icon: Tag, group: '基础设置' },
+  { href: '/dashboard/products', label: '产品', icon: Package, group: '基础设置' },
+  { href: '/dashboard/skus', label: 'SKU', icon: Barcode, group: '基础设置' },
+  { href: '/dashboard/barcode', label: '条码打印', icon: QrCode, group: '基础设置' },
+  { href: '/dashboard/goods-owners', label: '货主', icon: UserCircle, group: '基础设置' },
+  { href: '/dashboard/print-solutions', label: '打印方案', icon: Printer, group: '基础设置' },
   { href: '/dashboard/purchasing', label: '采购单', icon: ShoppingCart, group: '采购' },
-  { href: '/dashboard/customers', label: '客户', icon: Users, group: '销售' },
+  { href: '/dashboard/receiving', label: '收货', icon: PackageCheck, group: '采购' },
   { href: '/dashboard/sales-orders', label: '销售订单', icon: FileText, group: '销售' },
-  { href: '/dashboard/warehouses', label: '仓库', icon: Warehouse, group: '库存' },
   { href: '/dashboard/inventory', label: '库存', icon: PackageSearch, group: '库存' },
-  { href: '/dashboard/barcode', label: '条码打印', icon: QrCode, group: '工具' },
+  { href: '/dashboard/warehouse-operations/adjust', label: '库存调整', icon: Scale, group: '仓内作业' },
+  { href: '/dashboard/warehouse-operations/transfer', label: '库存移动', icon: ArrowRightLeft, group: '仓内作业' },
+  { href: '/dashboard/warehouse-operations/freeze', label: '库存冻结', icon: Lock, group: '仓内作业' },
+  { href: '/dashboard/warehouse-operations/process', label: '库存加工', icon: Cog, group: '仓内作业' },
+  { href: '/dashboard/warehouse-operations/stocktaking', label: '盘点', icon: ClipboardCheck, group: '仓内作业' },
 ];
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {

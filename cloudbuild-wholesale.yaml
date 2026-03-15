@@ -1,0 +1,76 @@
+# StockFlow 批发站前台 - 独立部署到 Cloud Run（stockmate-wholesale）
+# 2026-03-15 用法: ./scripts/deploy-wholesale.sh  或  gcloud builds submit --config=cloudbuild-wholesale.yaml
+# 前提: Backend (stockmate-api) 已部署，会读取其 URL 作为 API 地址
+
+substitutions:
+  _REGION: us-central1
+  _BACKEND_SERVICE: stockmate-api
+  _WHOLESALE_SERVICE: stockmate-wholesale
+
+steps:
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: get-backend-url
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        URL=$$(gcloud run services describe ${_BACKEND_SERVICE} --region=${_REGION} --format='value(status.url)')
+        [ -z "$$URL" ] && { echo "Backend 未部署，请先运行 ./scripts/deploy-backend.sh"; exit 1; }
+        echo "$$URL" > backend_url.txt
+        echo "Backend URL: $$URL"
+
+  - name: gcr.io/cloud-builders/docker
+    id: build-wholesale
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        BACKEND=$$(cat backend_url.txt)
+        API_BASE="$${BACKEND}/api/wholesale"
+        API_AUTH="$${BACKEND}/api"
+        docker build \
+          --build-arg NEXT_PUBLIC_API_BASE_URL="$$API_BASE" \
+          --build-arg NEXT_PUBLIC_API_BASE_AUTH="$$API_AUTH" \
+          --build-arg NEXT_PUBLIC_TENANT_SLUG=test-company \
+          -t ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_WHOLESALE_SERVICE}:${BUILD_ID} \
+          -f wholesale-frontend/Dockerfile .
+    dir: .
+    waitFor: ['get-backend-url']
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-wholesale
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_WHOLESALE_SERVICE}:${BUILD_ID}
+    waitFor: ['build-wholesale']
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-wholesale
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_WHOLESALE_SERVICE}
+      - --image
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_WHOLESALE_SERVICE}:${BUILD_ID}
+      - --region
+      - ${_REGION}
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --port
+      - "3000"
+    waitFor: ['push-wholesale']
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: iam-wholesale
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - add-iam-policy-binding
+      - ${_WHOLESALE_SERVICE}
+      - --region=${_REGION}
+      - --member=allUsers
+      - --role=roles/run.invoker
+    waitFor: ['deploy-wholesale']

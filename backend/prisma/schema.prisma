@@ -33,6 +33,7 @@ model Tenant {
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
   users             User[]
+  actionLogs        ActionLog[]
   categories        Category[]
   brands            Brand[]
   products          Product[]
@@ -47,6 +48,10 @@ model Tenant {
   inventoryLedgers  InventoryLedger[]
   customers         Customer[]
   salesOrders       SalesOrder[]
+  stockFreezes      StockFreeze[]
+  goodsOwners       GoodsOwner[]
+  printSolutions    PrintSolution[]
+  wholesaleCart     WholesaleCartItem[]
 
   @@map("tenants")
 }
@@ -75,14 +80,43 @@ model User {
   lastLoginAt   DateTime? @map("last_login_at")
   refreshToken  String?   @map("refresh_token")
   tenantId      String    @map("tenant_id")
+  // Updated: 2026-03-14T18:00:00 - 批发站 P0: 账号可选绑定 Customer（用于零售商登录）
+  customerId    String?   @map("customer_id")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer   Customer?   @relation(fields: [customerId], references: [id])
+  actionLogs ActionLog[]
 
   @@unique([email, tenantId])
   @@index([tenantId])
   @@map("users")
+}
+
+// ============================================================
+// Action Log - 操作日志 (Phase 1 底座整合)
+// Updated: 2026-03-14
+// ============================================================
+
+/// 操作日志：记录关键业务操作，便于审计与追溯
+model ActionLog {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  userId     String?  @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  payload    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("action_logs")
 }
 
 enum UserRole {
@@ -184,6 +218,8 @@ model Sku {
   costPrice         Decimal? @map("cost_price") @db.Decimal(10, 2)
   wholesalePrice    Decimal? @map("wholesale_price") @db.Decimal(10, 2)
   retailPrice       Decimal? @map("retail_price") @db.Decimal(10, 2)
+  // Updated: 2026-03-14T16:00:00 - 批发站 P0: 按 SKU 维度维护最小起订量
+  minOrderQty       Int?     @map("min_order_qty")
   weight            Decimal? @db.Decimal(8, 3)
   images            Json?
   isActive          Boolean  @default(true) @map("is_active")
@@ -196,6 +232,8 @@ model Sku {
   soItems         SalesOrderItem[]
   inventoryItems  InventoryItem[]
   inventoryLedgers InventoryLedger[]
+  stockFreezes     StockFreeze[]
+  wholesaleCart    WholesaleCartItem[]
 
   @@unique([code, tenantId])
   @@index([productId])
@@ -252,6 +290,7 @@ model Warehouse {
   inventoryItems  InventoryItem[]
   inventoryLedgers InventoryLedger[]
   salesOrders    SalesOrder[]
+  stockFreezes   StockFreeze[]
 
   @@unique([code, tenantId])
   @@index([tenantId])
@@ -276,6 +315,7 @@ model BinLocation {
   warehouse      Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inventoryItems InventoryItem[]
+  stockFreezes   StockFreeze[]
 
   @@unique([code, tenantId])
   @@index([warehouseId])
@@ -401,7 +441,7 @@ model PurchaseReceipt {
   receiptNumber   String        @map("receipt_number")
   purchaseOrderId String        @map("purchase_order_id")
   tenantId        String        @map("tenant_id")
-  status          ReceiptStatus @default(PENDING)
+  status          ReceiptStatus @default(PENDING_ARRIVAL)
   receivedAt      DateTime?     @map("received_at")
   notes           String?
   createdAt       DateTime      @default(now()) @map("created_at")
@@ -417,11 +457,17 @@ model PurchaseReceipt {
   @@map("purchase_receipts")
 }
 
+// 阶段二收货流程：6 状态/6 Tab（参考 ModernWMS Asn asn_status 0~4）
+// 2026-03-14 扩展多阶段，保留 PENDING/IN_PROGRESS 以兼容旧数据
 enum ReceiptStatus {
-  PENDING
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
+  PENDING           // 兼容旧数据，迁移为 PENDING_ARRIVAL
+  IN_PROGRESS       // 兼容旧数据，迁移为 ARRIVED
+  PENDING_ARRIVAL   // 待到货（Tab 2）
+  ARRIVED           // 待卸货（Tab 3）
+  UNLOADED          // 待分拣（Tab 4）
+  SORTED            // 待上架（Tab 5）
+  COMPLETED         // 到货明细（Tab 6）
+  CANCELLED         // 已取消
 }
 
 /// Receipt line item with discrepancy tracking
@@ -509,6 +555,42 @@ enum LedgerType {
 }
 
 // ============================================================
+// 仓内作业 - 库存冻结单据 (Phase 4)
+// Updated: 2026-03-14
+// ============================================================
+
+/// 库存冻结单：记录冻结/解冻操作，与 InventoryItem.lockedQty 联动
+model StockFreeze {
+  id            String           @id @default(uuid())
+  tenantId      String           @map("tenant_id")
+  skuId         String           @map("sku_id")
+  warehouseId   String           @map("warehouse_id")
+  binLocationId String?          @map("bin_location_id")
+  quantity      Int
+  reason        String?
+  status        StockFreezeStatus @default(ACTIVE)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sku        Sku          @relation(fields: [skuId], references: [id])
+  warehouse  Warehouse    @relation(fields: [warehouseId], references: [id])
+  binLocation BinLocation? @relation(fields: [binLocationId], references: [id])
+
+  @@index([tenantId])
+  @@index([skuId])
+  @@index([warehouseId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("stock_freezes")
+}
+
+enum StockFreezeStatus {
+  ACTIVE
+  RELEASED
+}
+
+// ============================================================
 // Phase 3: Customer & Sales Order (批发销售)
 // Updated: 2026-02-28T14:00:00
 // ============================================================
@@ -531,7 +613,9 @@ model Customer {
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  salesOrders SalesOrder[]
+  salesOrders   SalesOrder[]
+  users         User[]
+  wholesaleCart WholesaleCartItem[]
 
   @@unique([code, tenantId])
   @@index([tenantId])
@@ -543,6 +627,62 @@ enum CustomerTier {
   SILVER
   GOLD
   VIP
+}
+
+// ============================================================
+// 货主（GoodsOwner）- 一仓多货主、代管等；参考 ModernWMS GoodsownerEntity
+// Updated: 2026-03-14
+// ============================================================
+
+model GoodsOwner {
+  id          String   @id @default(uuid())
+  name        String   @map("name")
+  code        String
+  tenantId    String   @map("tenant_id")
+  city        String?
+  address     String?
+  contactName String?  @map("contact_name")
+  contactTel  String?  @map("contact_tel")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([code, tenantId])
+  @@index([tenantId])
+  @@map("goods_owners")
+}
+
+// ============================================================
+// 打印方案（PrintSolution）- 出库单/入库单/拣货单等模板；参考 ModernWMS PrintSolutionEntity
+// Updated: 2026-03-14
+// ============================================================
+
+enum PrintDocumentType {
+  OUTBOUND_SHEET  // 出库单
+  INBOUND_SHEET   // 入库单
+  PICK_LIST       // 拣货单
+}
+
+model PrintSolution {
+  id             String            @id @default(uuid())
+  tenantId       String            @map("tenant_id")
+  documentType   PrintDocumentType  @map("document_type")
+  name           String            @map("name")
+  templateBody   String            @map("template_body") @db.Text
+  reportWidthMm  Decimal?          @map("report_width_mm") @db.Decimal(8, 2)
+  reportHeightMm Decimal?         @map("report_height_mm") @db.Decimal(8, 2)
+  isDefault      Boolean           @default(false) @map("is_default")
+  sortOrder      Int               @default(0) @map("sort_order")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, documentType])
+  @@map("print_solutions")
 }
 
 model SalesOrder {
@@ -604,4 +744,28 @@ enum SOStatus {
 enum OrderSource {
   MANUAL
   SHOPIFY
+  WHOLESALE_SITE
+}
+
+// ============================================================
+// 批发站购物车 - WholesaleCartItem (按租户/客户/SKU 维度维护购物车)
+// Updated: 2026-03-14T16:00:00
+// ============================================================
+
+model WholesaleCartItem {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  customerId String   @map("customer_id")
+  skuId      String   @map("sku_id")
+  quantity   Int      @default(0)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id])
+  sku      Sku      @relation(fields: [skuId], references: [id])
+
+  @@unique([tenantId, customerId, skuId])
+  @@index([tenantId, customerId])
+  @@map("wholesale_cart_items")
 }

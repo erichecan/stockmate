@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import {
@@ -22,6 +23,7 @@ import { CreateShipmentDto } from './dto/create-shipment.dto';
 import { UpdateShipmentDto } from './dto/update-shipment.dto';
 import { AddPackingItemsDto } from './dto/add-packing-items.dto';
 import { CreateReceiptDto } from './dto/create-receipt.dto';
+import { ReceiptIdsDto, PutawayCompleteDto } from './dto/receipt-phase-actions.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { POStatus } from '@prisma/client';
 
@@ -39,9 +41,10 @@ export class PurchasingController {
   @ApiResponse({ status: 404, description: 'Supplier not found' })
   async createPO(
     @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('sub') userId: string,
     @Body() dto: CreatePurchaseOrderDto,
   ) {
-    return this.purchasingService.createPO(tenantId, dto);
+    return this.purchasingService.createPO(tenantId, userId, dto);
   }
 
   @Get('orders')
@@ -84,9 +87,10 @@ export class PurchasingController {
   async updatePO(
     @Param('id') id: string,
     @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('sub') userId: string,
     @Body() dto: UpdatePurchaseOrderDto,
   ) {
-    return this.purchasingService.updatePO(id, tenantId, dto);
+    return this.purchasingService.updatePO(id, tenantId, userId, dto);
   }
 
   @Post('orders/:id/cancel')
@@ -96,8 +100,9 @@ export class PurchasingController {
   async cancelPO(
     @Param('id') id: string,
     @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('sub') userId: string,
   ) {
-    return this.purchasingService.cancelPO(id, tenantId);
+    return this.purchasingService.cancelPO(id, tenantId, userId);
   }
 
   // ==================== Shipments ====================
@@ -162,9 +167,10 @@ export class PurchasingController {
   @ApiResponse({ status: 404, description: 'Purchase order not found' })
   async createReceipt(
     @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('sub') userId: string,
     @Body() dto: CreateReceiptDto,
   ) {
-    return this.purchasingService.createReceipt(tenantId, dto);
+    return this.purchasingService.createReceipt(tenantId, userId, dto);
   }
 
   @Get('receipts')
@@ -176,5 +182,72 @@ export class PurchasingController {
     @Query('purchaseOrderId') purchaseOrderId?: string,
   ) {
     return this.purchasingService.findReceipts(tenantId, purchaseOrderId);
+  }
+
+  // ==================== 阶段二：收货 6 状态/6 Tab（参考 ModernWMS Asn）====================
+  // 2026-03-14
+
+  @Get('receipts/by-phase')
+  @ApiOperation({ summary: '按阶段分页查询收货列表（6 Tab）' })
+  @ApiQuery({ name: 'phase', required: true, description: 'NOTICE|PENDING_ARRIVAL|ARRIVED|UNLOADED|SORTED|COMPLETED' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, description: '分页收货列表' })
+  async listReceiptsByPhase(
+    @CurrentUser('tenantId') tenantId: string,
+    @Query('phase') phase: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 20;
+    return this.purchasingService.listReceiptsByPhase(
+      tenantId,
+      phase || 'NOTICE',
+      pageNum,
+      limitNum,
+    );
+  }
+
+  @Put('receipts/confirm-arrival')
+  @ApiOperation({ summary: '确认到货（待到货 -> 待卸货）' })
+  @ApiResponse({ status: 200, description: 'Updated count' })
+  async confirmArrival(
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: ReceiptIdsDto,
+  ) {
+    return this.purchasingService.confirmArrival(tenantId, dto.receiptIds);
+  }
+
+  @Put('receipts/confirm-unload')
+  @ApiOperation({ summary: '确认卸货（待卸货 -> 待分拣）' })
+  @ApiResponse({ status: 200, description: 'Updated count' })
+  async confirmUnload(
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: ReceiptIdsDto,
+  ) {
+    return this.purchasingService.confirmUnload(tenantId, dto.receiptIds);
+  }
+
+  @Put('receipts/sorting-complete')
+  @ApiOperation({ summary: '分拣完成（待分拣 -> 待上架）' })
+  @ApiResponse({ status: 200, description: 'Updated count' })
+  async sortingComplete(
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: ReceiptIdsDto,
+  ) {
+    return this.purchasingService.sortingComplete(tenantId, dto.receiptIds);
+  }
+
+  @Put('receipts/:id/putaway')
+  @ApiOperation({ summary: '上架完成（待上架 -> 已完成，并调用库存入库）' })
+  @ApiResponse({ status: 200, description: 'Putaway completed' })
+  async putawayComplete(
+    @Param('id') receiptId: string,
+    @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('sub') userId: string,
+    @Body() dto: PutawayCompleteDto,
+  ) {
+    return this.purchasingService.putawayComplete(tenantId, userId, receiptId, dto);
   }
 }

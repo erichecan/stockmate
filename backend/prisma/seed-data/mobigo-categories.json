@@ -1,0 +1,179 @@
+{
+  "source": "https://www.mobigo.ie/ (客户批发站导航，抓取时间 2026-03-14)",
+  "description": "Mobigo 爱尔兰批发站左侧导航类目，用于仓库系统种子数据",
+  "categories": [
+    {
+      "name": "BIG BRANDS",
+      "nameEn": "Big Brands",
+      "code": "MOBIGO_BIG_BRANDS",
+      "sortOrder": 1,
+      "children": [
+        { "name": "BULK OFFER", "nameEn": "Bulk Offer", "code": "MOBIGO_BULK_OFFER", "sortOrder": 1 },
+        { "name": "Stock CLEARANCE", "nameEn": "Stock Clearance", "code": "MOBIGO_STOCK_CLEARANCE", "sortOrder": 2 },
+        {
+          "name": "LCD Screens / Batteries / Parts",
+          "nameEn": "LCD Screens Batteries Parts",
+          "code": "MOBIGO_LCD_BATTERIES_PARTS",
+          "sortOrder": 3,
+          "children": [
+            {
+              "name": "Batteries",
+              "nameEn": "Batteries",
+              "code": "MOBIGO_BATTERIES",
+              "sortOrder": 1,
+              "children": [
+                { "name": "Apple", "nameEn": "Apple", "code": "MOBIGO_BAT_APPLE", "sortOrder": 1 },
+                { "name": "Battery", "nameEn": "Battery", "code": "MOBIGO_BAT_GENERIC", "sortOrder": 2 },
+                { "name": "Hoco Battery", "nameEn": "Hoco Battery", "code": "MOBIGO_BAT_HOCO", "sortOrder": 3 },
+                { "name": "Nokia", "nameEn": "Nokia", "code": "MOBIGO_BAT_NOKIA", "sortOrder": 4 }
+              ]
+            },
+            { "name": "Huawei LCD", "nameEn": "Huawei LCD", "code": "MOBIGO_HUAWEI_LCD", "sortOrder": 2 },
+            {
+              "name": "iPhone LCD",
+              "nameEn": "iPhone LCD",
+              "code": "MOBIGO_IPHONE_LCD",
+              "sortOrder": 3,
+              "children": [
+                { "name": "JK LCD", "nameEn": "JK LCD", "code": "MOBIGO_IPHONE_JK_LCD", "sortOrder": 1 },
+                { "name": "Waterproof Seal", "nameEn": "Waterproof Seal", "code": "MOBIGO_IPHONE_WATERPROOF", "sortOrder": 2 }
+              ]
+            },
+            { "name": "Samsung LCD", "nameEn": "Samsung LCD", "code": "MOBIGO_SAMSUNG_LCD", "sortOrder": 4 }
+          ]
+        },
+        { "name": "Mobile & Tablet", "nameEn": "Mobile & Tablet", "code": "MOBIGO_MOBILE_TABLET", "sortOrder": 4 },
+        { "name": "ESSENTIAL Cable & Plug iPhone", "nameEn": "Essential Cable & Plug iPhone", "code": "MOBIGO_CABLE_PLUG_IPHONE", "sortOrder": 5 },
+        { "name": "SUMMER Essential", "nameEn": "Summer Essential", "code": "MOBIGO_SUMMER_ESSENTIAL", "sortOrder": 6 },
+        { "name": "ACEFAST", "nameEn": "ACEFAST", "code": "MOBIGO_ACEFAST", "sortOrder": 7 },
+        { "name": "Baseus", "nameEn": "Baseus", "code": "MOBIGO_BASEUS", "sortOrder": 8 },
+        { "name": "Hoco", "nameEn": "Hoco", "code": "MOBIGO_HOCO", "sortOrder": 9 },
+        { "name": "Huawei", "nameEn": "Huawei", "code": "MOBIGO_HUAWEI", "sortOrder": 10 },
+        { "name": "JBL", "nameEn": "JBL", "code": "MOBIGO_JBL", "sortOrder": 11 },
+        { "name": "UGREEN", "nameEn": "UGREEN", "code": "MOBIGO_UGREEN", "sortOrder": 12 },
+        { "name": "XIAOMI", "nameEn": "Xiaomi", "code": "MOBIGO_XIAOMI", "sortOrder": 13 }
+      ]
+    },
+    {
+      "name": "ATTRACTIVE",
+      "nameEn": "Attractive",
+      "code": "MOBIGO_ATTRACTIVE",
+      "sortOrder": 2,
+      "children": [
+        { "name": "Gift Ideas", "nameEn": "Gift Ideas", "code": "MOBIGO_GIFT_IDEAS", "sortOrder": 1 },
+        { "name": "Crazy Bundles", "nameEn": "Crazy Bundles", "code": "MOBIGO_CRAZY_BUNDLES", "sortOrder": 2 },
+        { "name": "Earbuds / TWS", "nameEn": "Earbuds TWS", "code": "MOBIGO_EARBUDS_TWS", "sortOrder": 3 },
+        { "name": "Gadgets / Toys", "nameEn": "Gadgets Toys", "code": "MOBIGO_GADGETS_TOYS", "sortOrder": 4 },
+        { "name": "New Arrivals Case Covers", "nameEn": "New Arrivals Case Covers", "code": "MOBIGO_NEW_ARRIVALS_CASE", "sortOrder": 5 },
+        { "name": "Power Bank", "nameEn": "Power Bank", "code": "MOBIGO_POWER_BANK", "sortOrder": 6 },
+        { "name": "Smart Watch Fit Band", "nameEn": "Smart Watch Fit Band", "code": "MOBIGO_SMART_WATCH", "sortOrder": 7 },
+        { "name": "Top Seller", "nameEn": "Top Seller", "code": "MOBIGO_TOP_SELLER", "sortOrder": 8 }
+      ]
+    },
+    {
+      "name": "CASES AND COVERS",
+      "nameEn": "Cases and Covers",
+      "code": "MOBIGO_CASES_COVERS",
+      "sortOrder": 3,
+      "children": [
+        { "name": "Airpod Cases / Air Tags", "nameEn": "Airpod Cases Air Tags", "code": "MOBIGO_AIRPOD_CASES", "sortOrder": 1 },
+        { "name": "Belt Cases & Covers", "nameEn": "Belt Cases & Covers", "code": "MOBIGO_BELT_CASES", "sortOrder": 2 },
+        { "name": "CLEARANCE CASES", "nameEn": "Clearance Cases", "code": "MOBIGO_CLEARANCE_CASES", "sortOrder": 3 },
+        {
+          "name": "Mobile Cases By Brand",
+          "nameEn": "Mobile Cases By Brand",
+          "code": "MOBIGO_CASES_BY_BRAND",
+          "sortOrder": 4,
+          "children": [
+            { "name": "Apple iPhone Cases", "nameEn": "Apple iPhone Cases", "code": "MOBIGO_CASE_APPLE", "sortOrder": 1 },
+            { "name": "Samsung Galaxy Cases", "nameEn": "Samsung Galaxy Cases", "code": "MOBIGO_CASE_SAMSUNG", "sortOrder": 2 },
+            { "name": "Huawei Cases", "nameEn": "Huawei Cases", "code": "MOBIGO_CASE_HUAWEI", "sortOrder": 3 },
+            { "name": "Nokia Cases", "nameEn": "Nokia Cases", "code": "MOBIGO_CASE_NOKIA", "sortOrder": 4 }
+          ]
+        },
+        {
+          "name": "Mobile Cases By Design",
+          "nameEn": "Mobile Cases By Design",
+          "code": "MOBIGO_CASES_BY_DESIGN",
+          "sortOrder": 5,
+          "children": [
+            { "name": "Carbon Fiber Case", "nameEn": "Carbon Fiber Case", "code": "MOBIGO_DESIGN_CARBON", "sortOrder": 1 },
+            { "name": "Liquid Silicone Case", "nameEn": "Liquid Silicone Case", "code": "MOBIGO_DESIGN_SILICONE", "sortOrder": 2 },
+            { "name": "Magsafe Magnetic Case", "nameEn": "Magsafe Magnetic Case", "code": "MOBIGO_DESIGN_MAGSAFE", "sortOrder": 3 },
+            { "name": "Wallet Case", "nameEn": "Wallet Case", "code": "MOBIGO_DESIGN_WALLET", "sortOrder": 4 }
+          ]
+        },
+        { "name": "Tablet Cases & Covers", "nameEn": "Tablet Cases & Covers", "code": "MOBIGO_TABLET_CASES", "sortOrder": 6 },
+        { "name": "Wallet Case From 1.00", "nameEn": "Wallet Case From 1.00", "code": "MOBIGO_WALLET_CASE", "sortOrder": 7 }
+      ]
+    },
+    {
+      "name": "TEMPERED GLASS",
+      "nameEn": "Tempered Glass",
+      "code": "MOBIGO_TEMPERED_GLASS",
+      "sortOrder": 4,
+      "children": [
+        { "name": "Apple iWatch", "nameEn": "Apple iWatch", "code": "MOBIGO_GLASS_IWATCH", "sortOrder": 1 },
+        { "name": "HOCO Screen Protector", "nameEn": "HOCO Screen Protector", "code": "MOBIGO_GLASS_HOCO", "sortOrder": 2 },
+        {
+          "name": "Screen Protector",
+          "nameEn": "Screen Protector",
+          "code": "MOBIGO_SCREEN_PROTECTOR",
+          "sortOrder": 3,
+          "children": [
+            { "name": "Apple iPhone Screen Protector", "nameEn": "Apple iPhone Screen Protector", "code": "MOBIGO_GLASS_IPHONE", "sortOrder": 1 },
+            { "name": "Samsung Screen Protector", "nameEn": "Samsung Screen Protector", "code": "MOBIGO_GLASS_SAMSUNG", "sortOrder": 2 },
+            { "name": "Huawei Screen Protector", "nameEn": "Huawei Screen Protector", "code": "MOBIGO_GLASS_HUAWEI", "sortOrder": 3 },
+            { "name": "Universal Screen Protector", "nameEn": "Universal Screen Protector", "code": "MOBIGO_GLASS_UNIVERSAL", "sortOrder": 4 }
+          ]
+        },
+        { "name": "Tablet Tempered Glass", "nameEn": "Tablet Tempered Glass", "code": "MOBIGO_GLASS_TABLET", "sortOrder": 4 }
+      ]
+    },
+    {
+      "name": "ACCESSORIES",
+      "nameEn": "Accessories",
+      "code": "MOBIGO_ACCESSORIES",
+      "sortOrder": 5,
+      "children": [
+        { "name": "Armband", "nameEn": "Armband", "code": "MOBIGO_ACC_ARMBAND", "sortOrder": 1 },
+        { "name": "Bluetooth Speaker", "nameEn": "Bluetooth Speaker", "code": "MOBIGO_ACC_SPEAKER", "sortOrder": 2 },
+        {
+          "name": "Cable / Adapter",
+          "nameEn": "Cable Adapter",
+          "code": "MOBIGO_ACC_CABLE",
+          "sortOrder": 3,
+          "children": [
+            { "name": "iPhone Cables", "nameEn": "iPhone Cables", "code": "MOBIGO_CABLE_IPHONE", "sortOrder": 1 },
+            { "name": "Type-C Cables", "nameEn": "Type-C Cables", "code": "MOBIGO_CABLE_TYPEC", "sortOrder": 2 },
+            { "name": "Micro Cables", "nameEn": "Micro Cables", "code": "MOBIGO_CABLE_MICRO", "sortOrder": 3 }
+          ]
+        },
+        { "name": "Car Accessories", "nameEn": "Car Accessories", "code": "MOBIGO_ACC_CAR", "sortOrder": 4 },
+        { "name": "Car Holder", "nameEn": "Car Holder", "code": "MOBIGO_ACC_CAR_HOLDER", "sortOrder": 5 },
+        {
+          "name": "Chargers and Plugs",
+          "nameEn": "Chargers and Plugs",
+          "code": "MOBIGO_ACC_CHARGERS",
+          "sortOrder": 6,
+          "children": [
+            { "name": "Car Charger", "nameEn": "Car Charger", "code": "MOBIGO_CHG_CAR", "sortOrder": 1 },
+            { "name": "Main Charger Plugs", "nameEn": "Main Charger Plugs", "code": "MOBIGO_CHG_MAIN", "sortOrder": 2 },
+            { "name": "Wireless Charger", "nameEn": "Wireless Charger", "code": "MOBIGO_CHG_WIRELESS", "sortOrder": 3 }
+          ]
+        },
+        { "name": "Earphone / Headset", "nameEn": "Earphone Headset", "code": "MOBIGO_ACC_EARPHONE", "sortOrder": 7 },
+        { "name": "Memory Cards / USB", "nameEn": "Memory Cards USB", "code": "MOBIGO_ACC_MEMORY", "sortOrder": 8 },
+        { "name": "Phone Holders", "nameEn": "Phone Holders", "code": "MOBIGO_ACC_HOLDERS", "sortOrder": 9 },
+        { "name": "Selfie Sticks / Phone Stand", "nameEn": "Selfie Sticks Phone Stand", "code": "MOBIGO_ACC_SELFIE", "sortOrder": 10 }
+      ]
+    },
+    {
+      "name": "PARTS",
+      "nameEn": "Parts",
+      "code": "MOBIGO_PARTS",
+      "sortOrder": 6,
+      "children": []
+    }
+  ]
+}
