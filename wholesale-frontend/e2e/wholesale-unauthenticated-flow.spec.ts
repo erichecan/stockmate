@@ -12,7 +12,7 @@ test.describe('批发站 P0 未登录可浏览', () => {
   test('首页未登录可访问，且有「未登录可浏览」说明', async ({ page }) => {
     await page.goto(BASE + '/');
     await expect(page).not.toHaveURL(/\/login/);
-    await expect(page.getByText('未登录可浏览类目与部分商品，登录后查看价格与下单')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('main').getByText('未登录可浏览类目与部分商品，登录后查看价格与下单')).toBeVisible({ timeout: 10000 });
   });
 
   test('商品类目页未登录可访问', async ({ page }) => {

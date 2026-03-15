@@ -1,11 +1,11 @@
-// Updated: 2026-03-14T18:35:00 - 批发站 P0: 订单详情页（调用 /wholesale/orders/:id）
+// Updated: 2026-03-15 - 批发站 P0: 订单详情页；支持 Next 15+ params Promise
 'use client';
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 
 type OrderDetailPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }> | { id: string };
 };
 
 type OrderItemLine = {
@@ -25,12 +25,32 @@ type OrderDetail = {
 };
 
 export default function OrderDetailPage({ params }: OrderDetailPageProps) {
-  const { id } = params;
+  const [resolvedId, setResolvedId] = useState<string | null>(() => {
+    const p = params as { id?: string };
+    if (p && typeof (params as Promise<unknown>)?.then !== 'function')
+      return p.id ?? null;
+    return null;
+  });
   const [data, setData] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (typeof (params as Promise<unknown>)?.then === 'function') {
+      (params as Promise<{ id: string }>).then((r) =>
+        setResolvedId(r?.id ?? null),
+      );
+    } else {
+      setResolvedId((params as { id: string })?.id ?? null);
+    }
+  }, [params]);
+
+  useEffect(() => {
+    const id = resolvedId;
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     const load = async () => {
       try {
         setLoading(true);
@@ -55,11 +75,13 @@ export default function OrderDetailPage({ params }: OrderDetailPageProps) {
       }
     };
     load();
-  }, [id]);
+  }, [resolvedId]);
 
   return (
     <section className="space-y-4">
-      <h2 className="text-xl font-semibold">订单详情（/orders/{id}）</h2>
+      <h2 className="text-xl font-semibold">
+        订单详情{resolvedId ? `（/orders/${resolvedId}）` : ''}
+      </h2>
       {loading && <p className="text-sm text-muted-foreground">加载中…</p>}
       {error && <p className="text-sm text-red-500">{error}</p>}
 

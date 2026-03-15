@@ -1,11 +1,11 @@
-// Updated: 2026-03-14T19:00:00 - 批发站: 类目商品列表 + 搜索 + 简单分页
+// Updated: 2026-03-15 - 批发站: 类目商品列表 + 搜索 + 简单分页；支持 Next 15+ params Promise，无 id 不请求
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import api from '@/lib/api';
 
 type CategoryPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }> | { id: string };
 };
 
 type ProductItem = {
@@ -14,8 +14,16 @@ type ProductItem = {
   nameEn?: string | null;
 };
 
+function resolveId(params: CategoryPageProps['params']): string | null {
+  if (params === null || params === undefined) return null;
+  if (typeof (params as Promise<unknown>)?.then === 'function') return null;
+  return (params as { id: string }).id ?? null;
+}
+
 export default function CategoryPage({ params }: CategoryPageProps) {
-  const { id } = params;
+  const [resolvedId, setResolvedId] = useState<string | null>(() =>
+    resolveId(params),
+  );
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ProductItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +32,26 @@ export default function CategoryPage({ params }: CategoryPageProps) {
   const pageSize = 12;
 
   useEffect(() => {
+    let cancelled = false;
+    if (typeof (params as Promise<unknown>)?.then === 'function') {
+      (params as Promise<{ id: string }>).then((r) => {
+        if (!cancelled) setResolvedId(r?.id ?? null);
+      });
+    } else {
+      setResolvedId((params as { id: string })?.id ?? null);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [params]);
+
+  useEffect(() => {
+    const id = resolvedId;
+    if (!id) {
+      setLoading(false);
+      setItems([]);
+      return;
+    }
     const fetchData = async () => {
       try {
         setLoading(true);
@@ -37,20 +65,20 @@ export default function CategoryPage({ params }: CategoryPageProps) {
         }
 
         const endpoint = token ? '/products' : '/public/products';
-        const params: Record<string, string> = { categoryId: id };
+        const query: Record<string, string> = { categoryId: id };
         if (!token) {
-          params.tenantSlug = tenantSlug;
+          query.tenantSlug = tenantSlug;
         }
 
         const res = await api.get(endpoint, {
-          params,
+          params: query,
           headers: token
             ? { Authorization: `Bearer ${token}` }
             : undefined,
         });
 
-        setItems(res.data || []);
-      } catch (e) {
+        setItems(Array.isArray(res.data) ? res.data : []);
+      } catch (_e) {
         setError('加载类目商品失败，请稍后重试');
       } finally {
         setLoading(false);
@@ -58,7 +86,7 @@ export default function CategoryPage({ params }: CategoryPageProps) {
     };
 
     fetchData();
-  }, [id]);
+  }, [resolvedId]);
 
   const filtered = useMemo(() => {
     const kw = searchKeyword.trim().toLowerCase();
@@ -87,7 +115,9 @@ export default function CategoryPage({ params }: CategoryPageProps) {
       <header className="space-y-1">
         <h2 className="text-xl font-semibold">类目商品列表</h2>
         <p className="text-sm text-muted-foreground">
-          当前类目 ID：{id}，根据是否登录自动选择公开/批发接口。
+          {resolvedId
+            ? `当前类目 ID：${resolvedId}，根据是否登录自动选择公开/批发接口。`
+            : '正在加载类目…'}
         </p>
       </header>
 
@@ -106,10 +136,11 @@ export default function CategoryPage({ params }: CategoryPageProps) {
         />
       </div>
 
-      {loading && <p className="text-sm text-muted-foreground">加载中…</p>}
+      {!resolvedId && <p className="text-sm text-muted-foreground">加载类目信息中…</p>}
+      {resolvedId && loading && <p className="text-sm text-muted-foreground">加载中…</p>}
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      {!loading && !error && (
+      {resolvedId && !loading && !error && (
         <ul className="grid gap-3 md:grid-cols-2" role="list">
           {paged.map((p) => (
             <li key={p.id} className="rounded-md border border-border bg-card p-3 text-sm">

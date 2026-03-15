@@ -45,7 +45,10 @@ export class WholesaleProductsController {
     @Query('categoryId') categoryId?: string,
     @Query('q') q?: string,
   ): Promise<PublicProductListItemDto[]> {
-    // Note: 2026-03-14T16:10:00 - 为简单起见，这里返回非分页列表，后续可扩展分页 DTO
+    // 2026-03-15 修复：缺失 tenantSlug 时直接返回空数组，避免 trim 报错导致加载失败
+    if (!tenantSlug?.trim()) {
+      return [];
+    }
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug.trim() },
     });
@@ -91,6 +94,9 @@ export class WholesaleProductsController {
     @Param('id') id: string,
     @Query('tenantSlug') tenantSlug: string,
   ): Promise<PublicProductDetailDto | null> {
+    if (!tenantSlug?.trim()) {
+      return null;
+    }
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug.trim() },
     });

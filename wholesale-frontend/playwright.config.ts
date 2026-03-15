@@ -9,7 +9,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'html',
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4000',
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
@@ -17,7 +17,7 @@ export default defineConfig({
     ? undefined
     : {
         command: 'pnpm run dev',
-        url: 'http://localhost:3000',
+        url: 'http://localhost:4000',
         reuseExistingServer: true,
         timeout: 60000,
       },

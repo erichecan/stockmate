@@ -1,11 +1,11 @@
-// Updated: 2026-03-14T19:00:00 - 批发站: 商品详情页 + 加入购物车
+// Updated: 2026-03-15 - 批发站: 商品详情页 + 加入购物车；支持 Next 15+ params Promise
 'use client';
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 
 type ProductPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }> | { id: string };
 };
 
 type SkuItem = {
@@ -26,7 +26,12 @@ type ProductDetail = {
 };
 
 export default function ProductPage({ params }: ProductPageProps) {
-  const { id } = params;
+  const [resolvedId, setResolvedId] = useState<string | null>(() => {
+    const p = params as { id?: string };
+    if (p && typeof (params as Promise<unknown>)?.then !== 'function')
+      return p.id ?? null;
+    return null;
+  });
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ProductDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +39,21 @@ export default function ProductPage({ params }: ProductPageProps) {
   const [addingSkuId, setAddingSkuId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (typeof (params as Promise<unknown>)?.then === 'function') {
+      (params as Promise<{ id: string }>).then((r) =>
+        setResolvedId(r?.id ?? null),
+      );
+    } else {
+      setResolvedId((params as { id: string })?.id ?? null);
+    }
+  }, [params]);
+
+  useEffect(() => {
+    const id = resolvedId;
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     const fetchData = async () => {
       try {
         setLoading(true);
@@ -48,20 +68,20 @@ export default function ProductPage({ params }: ProductPageProps) {
         }
 
         const endpoint = token ? `/products/${id}` : `/public/products/${id}`;
-        const params: Record<string, string> = {};
+        const query: Record<string, string> = {};
         if (!token) {
-          params.tenantSlug = tenantSlug;
+          query.tenantSlug = tenantSlug;
         }
 
         const res = await api.get(endpoint, {
-          params,
+          params: query,
           headers: token
             ? { Authorization: `Bearer ${token}` }
             : undefined,
         });
 
         setData(res.data || null);
-      } catch (e) {
+      } catch (_e) {
         setError('加载商品详情失败，请稍后重试');
       } finally {
         setLoading(false);
@@ -69,7 +89,7 @@ export default function ProductPage({ params }: ProductPageProps) {
     };
 
     fetchData();
-  }, [id]);
+  }, [resolvedId]);
 
   const handleAddToCart = async (sku: SkuItem) => {
     if (!sku.id) return;
@@ -101,10 +121,11 @@ export default function ProductPage({ params }: ProductPageProps) {
   return (
     <section className="space-y-4">
       <h2 className="text-xl font-semibold">商品详情</h2>
-      {loading && <p className="text-sm text-muted-foreground">加载中…</p>}
+      {!resolvedId && <p className="text-sm text-muted-foreground">加载中…</p>}
+      {resolvedId && loading && <p className="text-sm text-muted-foreground">加载中…</p>}
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      {!loading && !error && data && (
+      {resolvedId && !loading && !error && data && (
         <div className="space-y-3 rounded-md border bg-card p-4 text-sm">
           <div>
             <div className="text-base font-medium">{data.name}</div>

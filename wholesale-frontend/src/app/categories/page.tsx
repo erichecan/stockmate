@@ -1,4 +1,4 @@
-// 2026-03-15 P0：类目导航页，未登录可访问，调用 public/categories（见 docs/wholesale-station-p0-spec.md）
+// 2026-03-15 P0：类目导航页，未登录可访问，调用 /public/categories（见 docs/wholesale-station-p0-spec.md）
 'use client';
 
 import { useEffect, useState } from 'react';
