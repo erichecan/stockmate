@@ -4,7 +4,7 @@
 # 前提: Backend 已部署，会从 Cloud Run 读取当前 Backend URL
 
 substitutions:
-  _REGION: us-central1
+  _REGION: europe-west1
   _BACKEND_SERVICE: stockmate-api
   _FRONTEND_SERVICE: stockmate-web
 

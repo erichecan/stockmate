@@ -1,6 +1,7 @@
 # StockFlow GCP 部署指南
 
-> 项目 ID: stockmate-488805 | 项目编号: 30589716607
+> 项目 ID: stockmate-488805 | 项目编号: 30589716607  
+> 默认区域: **europe-west1**（比利时，欧洲）
 
 ## 一、前置条件
 
@@ -69,16 +70,16 @@
 
 Push 到 `main` 即自动部署，无需本地提交。
 
-1. **首次**：在 [Cloud Build 触发器](https://console.cloud.google.com/cloud-build/triggers;region=us-central1?project=stockmate-488805) 连接 GitHub 仓库
+1. **首次**：在 [Cloud Build 触发器](https://console.cloud.google.com/cloud-build/triggers;region=europe-west1?project=stockmate-488805) 连接 GitHub 仓库
 2. 运行：
    ```bash
    ./scripts/create-github-trigger.sh
    ```
 
-部署完成后会输出：
-- Backend: `https://stockmate-api-xxx-uc.a.run.app`
-- Frontend: `https://stockmate-web-xxx-uc.a.run.app`
-- 批发站前台: `https://stockmate-wholesale-xxx-uc.a.run.app`（独立服务，需单独执行 `./scripts/deploy-wholesale.sh`）
+部署完成后会输出（区域 europe-west1，域名中可能带 `ew` 等标识）：
+- Backend: `https://stockmate-api-xxx-ew.a.run.app`
+- Frontend: `https://stockmate-web-xxx-ew.a.run.app`
+- 批发站前台: `https://stockmate-wholesale-xxx-ew.a.run.app`（独立服务，需单独执行 `./scripts/deploy-wholesale.sh`）
 
 ## 四、首次部署后
 

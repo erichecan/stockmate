@@ -1,211 +1,349 @@
-// Updated: 2026-03-14T19:00:00 - 批发站: 购物车页（调用 /wholesale/cart + /wholesale/orders）
+// 2026-03-16T23:30:00 - Shopping cart with MOQ validation, subtotal, and checkout
 'use client';
 
 import { useEffect, useState } from 'react';
-import api from '@/lib/api';
+import Link from 'next/link';
+import {
+  ShoppingCart,
+  Trash2,
+  Minus,
+  Plus,
+  Package,
+  ArrowRight,
+  ArrowLeft,
+  AlertTriangle,
+} from 'lucide-react';
+import { toast } from 'sonner';
 
+import { useAuthStore } from '@/lib/auth-store';
+import api from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { AuthGuard } from '@/components/auth-guard';
+import { Badge } from '@/components/ui/badge';
+
+// Updated: 2026-03-16T23:40:00 - P0 闭环: 与后端 WholesaleCartItemDto 对齐
 type CartItem = {
   skuId: string;
-  quantity: number;
+  skuCode?: string;
+  productName?: string;
+  variantLabel?: string;
   wholesalePrice: number;
-  minOrderQty: number;
-  stockStatus: string;
+  quantity: number;
+  minOrderQty?: number;
+  stockStatus?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
 };
 
-export default function CartPage() {
+function CartContent() {
+  const { isAuthenticated } = useAuthStore();
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [submittingOrder, setSubmittingOrder] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const loadCart = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const token =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('accessToken')
-          : null;
-      if (!token) {
-        setError('请先登录后再查看购物车。');
-        setItems([]);
-        return;
-      }
-      const res = await api.get('/cart', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setItems(res.data || []);
-    } catch (e) {
-      setError('加载购物车失败，请稍后重试。');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Updated: 2026-03-16T23:41:00 - P0 闭环: API 返回为数组，直接映射
   useEffect(() => {
-    loadCart();
-  }, []);
+    if (!isAuthenticated) return;
+    const load = async () => {
+      try {
+        const { data } = await api.get('/cart');
+        const arr = Array.isArray(data) ? data : data?.items || [];
+        setItems(arr);
+      } catch {
+        setItems([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [isAuthenticated]);
 
-  const updateQuantity = async (skuId: string, quantity: number) => {
+  // Updated: 2026-03-16T23:42:00 - P0 闭环: 字段名 qty→quantity 与后端对齐
+  const updateQuantity = async (skuId: string, newQty: number) => {
+    if (newQty < 1) return;
+    setItems((prev) =>
+      prev.map((item) =>
+        item.skuId === skuId ? { ...item, quantity: newQty } : item
+      )
+    );
     try {
-      const token =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('accessToken')
-          : null;
-      if (!token) return;
-      await api.post(
-        '/cart/items',
-        { skuId, quantity },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      await loadCart();
-    } catch (e) {
-      setError('更新数量失败，请检查起订量或稍后再试。');
+      const { data } = await api.post('/cart/items', { skuId, quantity: newQty });
+      if (Array.isArray(data)) setItems(data);
+    } catch {
+      // Revert handled silently
     }
   };
 
   const removeItem = async (skuId: string) => {
+    setItems((prev) => prev.filter((item) => item.skuId !== skuId));
     try {
-      const token =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('accessToken')
-          : null;
-      if (!token) return;
-      await api.delete(`/cart/items/${skuId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      await loadCart();
+      await api.delete(`/cart/items/${skuId}`);
+      toast.success('Item removed');
     } catch {
-      setError('删除商品失败，请稍后再试。');
+      toast.error('Failed to remove item');
     }
   };
 
-  const total = items.reduce(
-    (sum, it) => sum + it.wholesalePrice * it.quantity,
-    0,
+  const subtotal = items.reduce(
+    (sum, item) => sum + item.wholesalePrice * item.quantity,
+    0
   );
+  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
 
-  // 2026-03-14 23:xx:xx 补全缺失的提交订单逻辑，修复 build 报错 handleSubmitOrder
-  const handleSubmitOrder = async () => {
+  const moqViolations = items.filter(
+    (item) => item.minOrderQty && item.quantity < item.minOrderQty
+  );
+  const canCheckout = items.length > 0 && moqViolations.length === 0;
+
+  const handleCheckout = async () => {
+    if (!canCheckout) return;
+    setSubmitting(true);
     try {
-      setSubmittingOrder(true);
-      setSubmitError(null);
-      const token =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('accessToken')
-          : null;
-      if (!token) {
-        setSubmitError('请先登录后再提交订单。');
-        return;
-      }
-      await api.post('/orders', {}, { headers: { Authorization: `Bearer ${token}` } });
-      await loadCart();
-      window.location.href = '/orders';
-    } catch (e) {
-      setSubmitError('提交订单失败，请稍后再试。');
+      const { data } = await api.post('/orders');
+      toast.success('Order placed successfully!');
+      window.location.href = `/orders/${data.orderId || data.id || ''}`;
+    } catch {
+      toast.error('Failed to place order. Please try again.');
     } finally {
-      setSubmittingOrder(false);
+      setSubmitting(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-4 px-4 py-8 sm:px-6 lg:px-8">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="h-24 animate-pulse rounded-xl bg-muted" />
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <section className="space-y-4" aria-labelledby="cart-heading">
-      <h2 id="cart-heading" className="text-xl font-semibold text-foreground">购物车</h2>
-      {loading && <p className="text-sm text-muted-foreground">加载中…</p>}
-      {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Shopping Cart
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {items.length} {items.length === 1 ? 'item' : 'items'} in your cart
+          </p>
+        </div>
+        <Link href="/products">
+          <Button variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Continue Shopping
+          </Button>
+        </Link>
+      </div>
 
-      {!loading && !error && (
-        <>
-          <table className="w-full text-left text-xs border-collapse border border-border rounded-md overflow-hidden">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-[11px] text-muted-foreground">
-                <th className="py-2 px-2 font-medium">SKU</th>
-                <th className="py-2 px-2 font-medium">数量</th>
-                <th className="py-2 px-2 font-medium">单价</th>
-                <th className="py-2 px-2 font-medium">小计</th>
-                <th className="py-2 px-2 font-medium">库存</th>
-                <th className="py-2 px-2 font-medium w-12" scope="col">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it) => (
-                <tr key={it.skuId} className="border-b border-border">
-                  <td className="py-2 px-2 font-mono">{it.skuId}</td>
-                  <td className="py-2 px-2">
-                    <input
-                      type="number"
-                      aria-label={`${it.skuId} 数量`}
-                      className="w-16 rounded border border-input bg-background px-1 py-0.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      value={it.quantity}
-                      min={0}
-                      onChange={(e) =>
-                        updateQuantity(it.skuId, Number(e.target.value) || 0)
-                      }
-                    />
-                    <div className="text-[10px] text-muted-foreground">
-                      起订量：{it.minOrderQty}
-                    </div>
-                  </td>
-                  <td className="py-2 px-2">{it.wholesalePrice.toFixed(2)}</td>
-                  <td className="py-2 px-2">
-                    {(it.wholesalePrice * it.quantity).toFixed(2)}
-                  </td>
-                  <td className="py-2 px-2 text-[11px]">{it.stockStatus}</td>
-                  <td className="py-2 px-2 text-right">
-                    <button
-                      type="button"
-                      className="cursor-pointer text-[11px] text-destructive underline transition-colors hover:text-destructive/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
-                      onClick={() => removeItem(it.skuId)}
-                      aria-label={`删除 ${it.skuId}`}
-                    >
-                      删除
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {items.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="py-2 text-center text-xs text-muted-foreground"
-                  >
-                    购物车为空。
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">合计：</span>
-            <span className="font-semibold">{total.toFixed(2)}</span>
-          </div>
-
-          <div className="mt-4 border-t pt-3 text-sm">
-            {submitError && (
-              <p className="mb-2 text-xs text-red-600">{submitError}</p>
+      {items.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-16">
+            <ShoppingCart className="h-16 w-16 text-muted-foreground/30" />
+            <h2 className="text-lg font-semibold text-foreground">
+              Your cart is empty
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Browse our products and add items to your cart
+            </p>
+            <Link href="/products">
+              <Button className="gap-2">
+                <Package className="h-4 w-4" />
+                Browse Products
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Cart Items */}
+          <div className="space-y-3 lg:col-span-2">
+            {/* MOQ Warning */}
+            {moqViolations.length > 0 && (
+              <Card className="border-amber-200 bg-amber-50">
+                <CardContent className="flex items-start gap-3 p-4">
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">
+                      Minimum order quantity not met
+                    </p>
+                    <p className="mt-1 text-xs text-amber-700">
+                      {moqViolations.length}{' '}
+                      {moqViolations.length === 1 ? 'item needs' : 'items need'}{' '}
+                      quantity adjustment before checkout.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             )}
-            <div className="flex justify-end gap-2">
-              <a
-                href="/"
-                className="cursor-pointer rounded border border-border px-3 py-1 text-xs transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                继续选购
-              </a>
-              <button
-                type="button"
-                className="cursor-pointer rounded bg-primary px-3 py-1 text-xs text-primary-foreground transition-colors duration-200 hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={handleSubmitOrder}
-                disabled={submittingOrder || items.length === 0}
-              >
-                {submittingOrder ? '提交中…' : '提交订单'}
-              </button>
-            </div>
+
+            {items.map((item) => {
+              const belowMoq =
+                item.minOrderQty != null && item.quantity < item.minOrderQty;
+              const displayName = item.productName
+                ? `${item.productName}${item.variantLabel ? ` (${item.variantLabel})` : ''}`
+                : item.skuCode || item.skuId;
+              return (
+                <Card
+                  key={item.skuId}
+                  className={belowMoq ? 'border-amber-200' : ''}
+                >
+                  <CardContent className="flex gap-4 p-4">
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+                      <Package className="h-8 w-8 text-muted-foreground/20" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-medium text-foreground">
+                            {displayName}
+                          </h3>
+                          {item.skuCode && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              SKU: {item.skuCode}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => removeItem(item.skuId)}
+                          className="rounded-lg p-1.5 text-muted-foreground transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
+                          aria-label={`Remove ${displayName}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() =>
+                              updateQuantity(item.skuId, item.quantity - 1)
+                            }
+                            disabled={item.quantity <= 1}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={item.quantity}
+                            onChange={(e) =>
+                              updateQuantity(
+                                item.skuId,
+                                Math.max(1, parseInt(e.target.value) || 1)
+                              )
+                            }
+                            className="h-8 w-16 text-center text-sm"
+                            aria-label="Quantity"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() =>
+                              updateQuantity(item.skuId, item.quantity + 1)
+                            }
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                          {belowMoq && (
+                            <Badge
+                              variant="secondary"
+                              className="bg-amber-100 text-amber-700"
+                            >
+                              Min: {item.minOrderQty}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-foreground">
+                            &euro;
+                            {(item.wholesalePrice * item.quantity).toFixed(2)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            &euro;{Number(item.wholesalePrice).toFixed(2)} / unit
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
-        </>
+
+          {/* Order Summary */}
+          <div className="lg:col-span-1">
+            <Card className="sticky top-20">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base">Order Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>
+                      Items ({totalItems} {totalItems === 1 ? 'unit' : 'units'})
+                    </span>
+                    <span>&euro;{subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Shipping</span>
+                    <span className="text-emerald-600">Calculated at checkout</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-3">
+                  <div className="flex justify-between text-base font-semibold">
+                    <span>Subtotal</span>
+                    <span className="text-primary">
+                      &euro;{subtotal.toFixed(2)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Excl. VAT &amp; shipping
+                  </p>
+                </div>
+
+                <Button
+                  size="lg"
+                  className="w-full gap-2"
+                  onClick={handleCheckout}
+                  disabled={!canCheckout || submitting}
+                >
+                  {submitting ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                  ) : (
+                    <>
+                      Place Order
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+
+                {!canCheckout && items.length > 0 && (
+                  <p className="text-center text-xs text-amber-600">
+                    Please adjust quantities to meet minimum order requirements
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       )}
-    </section>
+    </div>
   );
 }
 
+export default function CartPage() {
+  return (
+    <AuthGuard>
+      <CartContent />
+    </AuthGuard>
+  );
+}

@@ -56,10 +56,13 @@ export class WholesaleCartController {
       return [];
     }
 
+    // Updated: 2026-03-16T23:32:00 - P0 闭环: include product name for frontend display
     const cartItems = await this.prisma.wholesaleCartItem.findMany({
       where: { tenantId, customerId },
       include: {
-        sku: true,
+        sku: {
+          include: { product: true },
+        },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -77,9 +80,16 @@ export class WholesaleCartController {
         customer.tier,
       );
       const minOrderQty = (sku as any).minOrderQty ?? 1;
+      const attrs = sku.variantAttributes as Record<string, string> | null;
+      const variantLabel = attrs
+        ? Object.values(attrs).join(' / ')
+        : '';
 
       result.push({
         skuId: sku.id,
+        skuCode: sku.code,
+        productName: (sku as any).product?.nameEn || (sku as any).product?.name || sku.code,
+        variantLabel,
         quantity: item.quantity,
         wholesalePrice: unitPrice,
         minOrderQty,

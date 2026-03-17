@@ -11,7 +11,7 @@
 #   Frontend: NEXT_PUBLIC_API_URL (构建时传入，指向 Backend URL)
 
 substitutions:
-  _REGION: us-central1
+  _REGION: europe-west1
   _BACKEND_SERVICE: stockmate-api
   _FRONTEND_SERVICE: stockmate-web
 
@@ -20,7 +20,7 @@ options:
 
 steps:
   # 0. 确保 Artifact Registry 仓库存在 (可选，首次部署时可能需要)
-  # 若报错，请先运行: gcloud artifacts repositories create cloud-run-source-deploy --repository-format=docker --location=us-central1
+  # 若报错，请先运行: gcloud artifacts repositories create cloud-run-source-deploy --repository-format=docker --location=europe-west1
 
   # 1. 构建 Backend 镜像
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk

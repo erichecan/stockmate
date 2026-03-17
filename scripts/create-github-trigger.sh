@@ -6,7 +6,7 @@
 
 set -e
 PROJECT_ID="${1:-stockmate-488805}"
-REGION="us-central1"
+REGION="europe-west1"
 REPO_OWNER="erichecan"
 REPO_NAME="stockmate"
 

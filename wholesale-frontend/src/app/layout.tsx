@@ -1,9 +1,10 @@
-// Updated: 2026-03-15 - 批发站前台布局；P0：未登录可浏览类目与部分商品，登录后查看价格与下单
+// 2026-03-16T22:52:00 - B2B Wholesale Platform layout: professional header with auth-aware nav
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { QueryProvider } from "@/lib/query-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { SiteHeader } from "@/components/site-header";
 
 import "./globals.css";
 
@@ -18,12 +19,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "批发站 · StockFlow",
-  description: "面向零售商的批发订货网站",
+  title: "StockMate Wholesale | B2B Phone Accessories",
+  description:
+    "B2B wholesale platform for phone accessories in Ireland & Europe. Browse, order, and manage your inventory.",
 };
-
-const navLinkClass =
-  "rounded px-2 py-1 text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 export default function RootLayout({
   children,
@@ -31,46 +30,42 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" data-scroll-behavior="smooth">
+    <html lang="en" data-scroll-behavior="smooth">
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background text-foreground antialiased`}
       >
         <QueryProvider>
-          <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-4">
-            <header className="mb-4 flex items-center justify-between border-b border-border pb-3">
-              <div className="space-y-0.5">
-                <div className="text-lg font-semibold text-foreground">
-                  批发站 Wholesale
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  未登录可浏览类目与部分商品，登录后查看价格与下单
-                </p>
-              </div>
-              <nav className="flex gap-1 text-xs" role="navigation" aria-label="主导航">
-                <a href="/" className={navLinkClass}>
-                  首页
-                </a>
-                <a href="/categories" className={navLinkClass}>
-                  商品类目
-                </a>
-                <a href="/cart" className={navLinkClass}>
-                  购物车
-                </a>
-                <a href="/orders" className={navLinkClass}>
-                  我的订单
-                </a>
-                <a href="/login" className={navLinkClass}>
-                  登录
-                </a>
-              </nav>
-            </header>
+          <div className="flex min-h-screen flex-col">
+            <SiteHeader />
 
-            <main className="flex-1 pb-6 pt-0" id="main-content" suppressHydrationWarning>
+            <main className="flex-1" id="main-content">
               {children}
             </main>
 
-            <footer className="mt-auto border-t border-border pt-3 text-center text-[11px] text-muted-foreground">
-              StockFlow 批发站 · Demo UI
+            <footer className="border-t border-border bg-card">
+              <div className="mx-auto flex max-w-7xl flex-col items-center gap-2 px-4 py-6 text-xs text-muted-foreground sm:flex-row sm:justify-between sm:px-6 lg:px-8">
+                <p>&copy; 2026 StockMate. All rights reserved.</p>
+                <div className="flex gap-4">
+                  <a
+                    href="/terms"
+                    className="transition-colors duration-200 hover:text-foreground"
+                  >
+                    Terms
+                  </a>
+                  <a
+                    href="/privacy"
+                    className="transition-colors duration-200 hover:text-foreground"
+                  >
+                    Privacy
+                  </a>
+                  <a
+                    href="/contact"
+                    className="transition-colors duration-200 hover:text-foreground"
+                  >
+                    Contact
+                  </a>
+                </div>
+              </div>
             </footer>
           </div>
 

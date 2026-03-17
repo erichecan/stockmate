@@ -1,0 +1,124 @@
+[
+  {
+    "name": "volses",
+    "value": "dd458084-baf8-3e7c-91a0-e7388c97192b",
+    "domain": "www.mobigo.ie",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "vsettings",
+    "value": "",
+    "domain": "www.mobigo.ie",
+    "path": "/",
+    "expires": 1804744800.871307,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "ASPSESSIONIDSSBRRQRR",
+    "value": "NNFCMINDFBPEONJGOPHLIJCH",
+    "domain": "www.mobigo.ie",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "__cf_bm",
+    "value": "ZiK8jxwPiXyDT2B6f7osIsIvplLWwH8znx3GzV7VIMM-1773715147-1.0.1.1-p9TILD0G4UjOfwCR42S1xxizGfa_9V6TzRnaC08wzcI8SpdE4rUYFwfMorz8JPpv6jrT4cqYUK67jNfeGaEnX.jnowsM1CLyaKZjej.aCzI",
+    "domain": ".www.mobigo.ie",
+    "path": "/",
+    "expires": 1773716947.449963,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "_ga",
+    "value": "GA1.2.1724886849.1773715148",
+    "domain": ".mobigo.ie",
+    "path": "/",
+    "expires": 1808275150.835713,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_gid",
+    "value": "GA1.2.1701084649.1773715148",
+    "domain": ".mobigo.ie",
+    "path": "/",
+    "expires": 1773801550,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_gat_gtag_UA_1399167_37",
+    "value": "1",
+    "domain": ".mobigo.ie",
+    "path": "/",
+    "expires": 1773715208,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "cf_clearance",
+    "value": "ECWACDB1NaLEzaFcX6J1dYjHQB3AJRscsNtLzXhdjRQ-1773715149-1.2.1.1-gPCDPQShOEYbDP4pZ8mASVuJFCyjnbiDJp5El74ExZ3lxE8NATpNJbMRuVcijdM1p.VQ6vqoR7BZnT0FLULLCDsb6rsjpl.N0EavZHfycPyJJiYTeDEsGOBYRijm4niMIfyVvh1jDp4OWLDptc7W.a0RYE4MGJ3FKzEdaDRv9B7MwEb9cItpHP5N9dP2lmTAd_nFlDRx7vOxYz59uMkQvrmhXJbrrpUDl.09yRI4Urg",
+    "domain": ".mobigo.ie",
+    "path": "/",
+    "expires": 1805251149.048265,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None",
+    "partitionKey": "https://mobigo.ie",
+    "_crHasCrossSiteAncestor": false
+  },
+  {
+    "name": "slt",
+    "value": "F2C3DD6D-5421-40FC-9BFF-8B7CAAA5E31C",
+    "domain": "www.mobigo.ie",
+    "path": "/",
+    "expires": 1773736751.575548,
+    "httpOnly": true,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "UserConfig",
+    "value": "Config%5FOrderDetailID=3011237&CustomerID=414&Email=youyouanddt%40hotmail%2Ecom&LastName=Zhang&FirstName=Chunyang",
+    "domain": "www.mobigo.ie",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "CustomerID",
+    "value": "229127F90D74FC315D14E6937464CF1B464DA436F26BDC975990D1E3B65C2CB4",
+    "domain": "www.mobigo.ie",
+    "path": "/",
+    "expires": 1804744800.575656,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "returnAddress",
+    "value": "%2Fmyaccount%2Easp",
+    "domain": "www.mobigo.ie",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  }
+]

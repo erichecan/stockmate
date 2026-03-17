@@ -29,6 +29,10 @@ model Tenant {
   phone       String?
   address     String?
   logoUrl     String?      @map("logo_url")
+  // Updated: 2026-03-16T22:01:00 - PRD 2.2.3 整单 MOQ：订单最低金额
+  minOrderAmount Decimal?  @map("min_order_amount") @db.Decimal(12, 2)
+  // Updated: 2026-03-16T22:01:00 - PRD 2.1.2 预售默认定金比例
+  defaultDepositRate Decimal? @default(0.30) @map("default_deposit_rate") @db.Decimal(3, 2)
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
@@ -52,6 +56,16 @@ model Tenant {
   goodsOwners       GoodsOwner[]
   printSolutions    PrintSolution[]
   wholesaleCart     WholesaleCartItem[]
+  customerPrices    CustomerPrice[]
+  skuUnits          SkuUnit[]
+  paymentRecords    PaymentRecord[]
+  invoices          Invoice[]
+  approvalRequests  ApprovalRequest[]
+  shiftHandovers    ShiftHandover[]
+  backorderItems    BackorderItem[]
+  stockCountTasks   StockCountTask[]
+  receivingInspections ReceivingInspection[]
+  pickWaves         PickWave[]
 
   @@map("tenants")
 }
@@ -100,6 +114,7 @@ model User {
 // ============================================================
 
 /// 操作日志：记录关键业务操作，便于审计与追溯
+/// Updated: 2026-03-16T22:07:00 - PRD 3.1.2 审计日志：增强审计追踪字段
 model ActionLog {
   id         String   @id @default(uuid())
   tenantId   String   @map("tenant_id")
@@ -108,6 +123,10 @@ model ActionLog {
   entityType String   @map("entity_type")
   entityId   String?  @map("entity_id")
   payload    Json?
+  // PRD 3.1.2: beforeValue/afterValue 用于记录变更前后值
+  beforeValue Json?   @map("before_value")
+  afterValue  Json?   @map("after_value")
+  ipAddress   String? @map("ip_address")
   createdAt  DateTime @default(now()) @map("created_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -116,15 +135,19 @@ model ActionLog {
   @@index([tenantId])
   @@index([userId])
   @@index([createdAt])
+  @@index([action])
+  @@index([entityType, entityId])
   @@map("action_logs")
 }
 
+// Updated: 2026-03-16T22:00:00 - PRD 3.1.1 权限矩阵：新增 FINANCE 角色
 enum UserRole {
   SUPER_ADMIN
   ADMIN
   PURCHASER
   WAREHOUSE
   SALES
+  FINANCE
   VIEWER
 }
 
@@ -187,6 +210,8 @@ model Product {
   tenantId      String        @map("tenant_id")
   status        ProductStatus @default(DRAFT)
   images        Json?
+  // Updated: 2026-03-16T22:04:00 - PRD 2.1.2 特价/清仓标签，如 ["CLEARANCE","SPECIAL_OFFER"]
+  tags          Json?
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 
@@ -220,20 +245,31 @@ model Sku {
   retailPrice       Decimal? @map("retail_price") @db.Decimal(10, 2)
   // Updated: 2026-03-14T16:00:00 - 批发站 P0: 按 SKU 维度维护最小起订量
   minOrderQty       Int?     @map("min_order_qty")
+  // Updated: 2026-03-16T22:03:00 - PRD 4.2.3 安全库存与补货点
+  safetyStock       Int?     @map("safety_stock")
+  reorderPoint      Int?     @map("reorder_point")
+  // Updated: 2026-03-16T22:03:00 - PRD 底价保护：允许售卖的最低价格
+  floorPrice        Decimal? @map("floor_price") @db.Decimal(10, 2)
   weight            Decimal? @db.Decimal(8, 3)
   images            Json?
   isActive          Boolean  @default(true) @map("is_active")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  product         Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
-  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  poItems         PurchaseOrderItem[]
-  soItems         SalesOrderItem[]
-  inventoryItems  InventoryItem[]
-  inventoryLedgers InventoryLedger[]
-  stockFreezes     StockFreeze[]
-  wholesaleCart    WholesaleCartItem[]
+  product            Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  poItems            PurchaseOrderItem[]
+  soItems            SalesOrderItem[]
+  inventoryItems     InventoryItem[]
+  inventoryLedgers   InventoryLedger[]
+  stockFreezes       StockFreeze[]
+  wholesaleCart       WholesaleCartItem[]
+  // Updated: 2026-03-16T22:03:00 - PRD 新增关联
+  customerPrices     CustomerPrice[]
+  skuUnits           SkuUnit[]
+  backorderItems     BackorderItem[]
+  stockCountItems    StockCountItem[]
+  receivingInspections ReceivingInspection[]
 
   @@unique([code, tenantId])
   @@index([productId])
@@ -291,6 +327,9 @@ model Warehouse {
   inventoryLedgers InventoryLedger[]
   salesOrders    SalesOrder[]
   stockFreezes   StockFreeze[]
+  // Updated: 2026-03-16T22:10:00 - PRD 新增关联
+  stockCountTasks StockCountTask[]
+  pickWaves       PickWave[]
 
   @@unique([code, tenantId])
   @@index([tenantId])
@@ -316,6 +355,9 @@ model BinLocation {
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inventoryItems InventoryItem[]
   stockFreezes   StockFreeze[]
+  // Updated: 2026-03-16T22:10:00 - PRD 新增关联
+  stockCountItems StockCountItem[]
+  pickWaveItems   PickWaveItem[]
 
   @@unique([code, tenantId])
   @@index([warehouseId])
@@ -398,6 +440,9 @@ model Shipment {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
+  // Updated: 2026-03-16T22:05:00 - PRD 4.1.1/2.1.2 预售联动
+  preorderEnabled Boolean @default(false) @map("preorder_enabled")
+
   purchaseOrder PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   packingLists  PackingListItem[]
@@ -407,12 +452,16 @@ model Shipment {
   @@map("shipments")
 }
 
+// Updated: 2026-03-16T22:00:00 - PRD 4.1.1 到柜预报状态流转
 enum ShipmentStatus {
   PENDING
+  LOADING
   LOADED
   IN_TRANSIT
   ARRIVED
+  RECEIVING
   DELIVERED
+  COMPLETED
 }
 
 /// Packing list item (carton → SKU mapping)
@@ -450,6 +499,8 @@ model PurchaseReceipt {
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   items         ReceiptItem[]
+  // Updated: 2026-03-16T22:10:00 - PRD 4.1.2 质检关联
+  inspections   ReceivingInspection[]
 
   @@unique([receiptNumber, tenantId])
   @@index([purchaseOrderId])
@@ -609,13 +660,23 @@ model Customer {
   tier        CustomerTier @default(NORMAL)
   isActive    Boolean      @default(true) @map("is_active")
   notes       String?
+  // Updated: 2026-03-16T22:02:00 - PRD 3.2.3 信用额度锁单
+  creditLimit        Decimal?  @map("credit_limit") @db.Decimal(12, 2)
+  outstandingBalance Decimal   @default(0) @map("outstanding_balance") @db.Decimal(12, 2)
+  creditFrozen       Boolean   @default(false) @map("credit_frozen")
+  paymentTermDays    Int       @default(30) @map("payment_term_days")
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  salesOrders   SalesOrder[]
-  users         User[]
-  wholesaleCart WholesaleCartItem[]
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  salesOrders    SalesOrder[]
+  users          User[]
+  wholesaleCart   WholesaleCartItem[]
+  // Updated: 2026-03-16T22:02:00 - PRD 新增关联
+  customerPrices CustomerPrice[]
+  paymentRecords PaymentRecord[]
+  invoices       Invoice[]
+  backorderItems BackorderItem[]
 
   @@unique([code, tenantId])
   @@index([tenantId])
@@ -697,6 +758,13 @@ model SalesOrder {
   notes       String?
   source      OrderSource  @default(MANUAL)
   externalId  String?      @map("external_id")
+  // Updated: 2026-03-16T22:06:00 - PRD 3.2.1 代客下单：记录操作人 ID
+  createdByUserId String?  @map("created_by_user_id")
+  // Updated: 2026-03-16T22:06:00 - PRD 2.1.2 预售订单定金
+  depositAmount   Decimal? @map("deposit_amount") @db.Decimal(12, 2)
+  depositPaid     Boolean  @default(false) @map("deposit_paid")
+  // Updated: 2026-03-16T22:06:00 - PRD 3.2.2 智能拆单追溯
+  splitFromOrderId String? @map("split_from_order_id")
   orderedAt   DateTime?    @map("ordered_at")
   shippedAt   DateTime?    @map("shipped_at")
   createdAt   DateTime     @default(now()) @map("created_at")
@@ -706,6 +774,9 @@ model SalesOrder {
   customer  Customer        @relation(fields: [customerId], references: [id])
   warehouse Warehouse       @relation(fields: [warehouseId], references: [id])
   items     SalesOrderItem[]
+  // Updated: 2026-03-16T22:06:00 - PRD 新增关联
+  backorderItems BackorderItem[]
+  invoices       Invoice[]
 
   @@unique([orderNumber, tenantId])
   @@index([tenantId])
@@ -731,20 +802,25 @@ model SalesOrderItem {
   @@map("sales_order_items")
 }
 
+// Updated: 2026-03-16T22:00:00 - PRD 3.2.2 智能拆单：新增 PARTIALLY_FULFILLED
 enum SOStatus {
   PENDING
   CONFIRMED
   PICKING
   PACKED
   SHIPPED
+  PARTIALLY_FULFILLED
   COMPLETED
   CANCELLED
 }
 
+// Updated: 2026-03-16T22:00:00 - PRD 3.2.1/2.1.2 订单来源：新增 SALES_REP, PREORDER
 enum OrderSource {
   MANUAL
   SHOPIFY
   WHOLESALE_SITE
+  SALES_REP
+  PREORDER
 }
 
 // ============================================================
@@ -768,4 +844,363 @@ model WholesaleCartItem {
   @@unique([tenantId, customerId, skuId])
   @@index([tenantId, customerId])
   @@map("wholesale_cart_items")
+}
+
+// ============================================================
+// PRD 6.1.2 新增数据模型
+// Created: 2026-03-16T22:08:00
+// ============================================================
+
+// ---- 客户专属价格 (PRD 2.2.1 智能分级定价：合同专属价优先级最高) ----
+
+model CustomerPrice {
+  id         String    @id @default(uuid())
+  customerId String    @map("customer_id")
+  skuId      String    @map("sku_id")
+  tenantId   String    @map("tenant_id")
+  price      Decimal   @db.Decimal(10, 2)
+  validFrom  DateTime  @map("valid_from")
+  validTo    DateTime? @map("valid_to")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sku      Sku      @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, skuId, tenantId])
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([skuId])
+  @@map("customer_prices")
+}
+
+// ---- SKU 多单位换算 (PRD 2.2.2 多单位自动换算) ----
+
+model SkuUnit {
+  id               String  @id @default(uuid())
+  skuId            String  @map("sku_id")
+  tenantId         String  @map("tenant_id")
+  unitName         String  @map("unit_name")
+  conversionFactor Int     @map("conversion_factor")
+  isBaseUnit       Boolean @default(false) @map("is_base_unit")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  sku    Sku    @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([skuId, unitName, tenantId])
+  @@index([tenantId])
+  @@index([skuId])
+  @@map("sku_units")
+}
+
+// ---- 收款记录 (PRD 3.2.3 信用额度锁单 - 恢复条件：客户付款登记) ----
+
+model PaymentRecord {
+  id         String        @id @default(uuid())
+  customerId String        @map("customer_id")
+  tenantId   String        @map("tenant_id")
+  amount     Decimal       @db.Decimal(12, 2)
+  method     PaymentMethod
+  reference  String?
+  notes      String?
+  receivedBy String        @map("received_by")
+  receivedAt DateTime      @map("received_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([receivedAt])
+  @@map("payment_records")
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CHECK
+  CREDIT_CARD
+  OTHER
+}
+
+// ---- 发票/账单 (PRD 2.1.1 本月待结欠款 + 3.2.4 对账单) ----
+
+model Invoice {
+  id          String        @id @default(uuid())
+  invoiceNo   String        @map("invoice_no")
+  tenantId    String        @map("tenant_id")
+  customerId  String        @map("customer_id")
+  orderId     String?       @map("order_id")
+  amount      Decimal       @db.Decimal(12, 2)
+  paidAmount  Decimal       @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  status      InvoiceStatus @default(UNPAID)
+  dueDate     DateTime?     @map("due_date")
+  issuedAt    DateTime      @default(now()) @map("issued_at")
+  paidAt      DateTime?     @map("paid_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order    SalesOrder? @relation(fields: [orderId], references: [id])
+
+  @@unique([invoiceNo, tenantId])
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// ---- 审批申请 (PRD 5.2.1 价格与额度放行) ----
+
+model ApprovalRequest {
+  id             String         @id @default(uuid())
+  tenantId       String         @map("tenant_id")
+  type           ApprovalType
+  requesterId    String         @map("requester_id")
+  customerId     String?        @map("customer_id")
+  orderId        String?        @map("order_id")
+  currentValue   String?        @map("current_value")
+  requestedValue String?        @map("requested_value")
+  reason         String?
+  status         ApprovalStatus @default(PENDING)
+  approvedBy     String?        @map("approved_by")
+  approvedAt     DateTime?      @map("approved_at")
+  expiresAt      DateTime?      @map("expires_at")
+  notes          String?
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([requesterId])
+  @@index([createdAt])
+  @@map("approval_requests")
+}
+
+enum ApprovalType {
+  PRICE_OVERRIDE
+  CREDIT_INCREASE
+  LARGE_ORDER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+// ---- 交接班记录 (PRD 3.1.3 交接班强制对账) ----
+
+model ShiftHandover {
+  id              String             @id @default(uuid())
+  tenantId        String             @map("tenant_id")
+  operatorId      String             @map("operator_id")
+  shiftStart      DateTime           @map("shift_start")
+  shiftEnd        DateTime?          @map("shift_end")
+  totalOrders     Int                @default(0) @map("total_orders")
+  expectedCash    Decimal            @default(0) @map("expected_cash") @db.Decimal(12, 2)
+  actualCash      Decimal?           @map("actual_cash") @db.Decimal(12, 2)
+  creditSales     Decimal            @default(0) @map("credit_sales") @db.Decimal(12, 2)
+  variance        Decimal?           @db.Decimal(12, 2)
+  varianceReason  String?            @map("variance_reason")
+  evidencePhotos  Json?              @map("evidence_photos")
+  status          ShiftHandoverStatus @default(ACTIVE)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([operatorId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("shift_handovers")
+}
+
+enum ShiftHandoverStatus {
+  ACTIVE
+  PENDING_HANDOVER
+  COMPLETED
+  FLAGGED
+}
+
+// ---- 欠货池 (PRD 3.2.2 智能拆单与欠货记录) ----
+
+model BackorderItem {
+  id              String            @id @default(uuid())
+  tenantId        String            @map("tenant_id")
+  originalOrderId String            @map("original_order_id")
+  customerId      String            @map("customer_id")
+  skuId           String            @map("sku_id")
+  backorderQty    Int               @map("backorder_qty")
+  fulfilledQty    Int               @default(0) @map("fulfilled_qty")
+  status          BackorderStatus   @default(PENDING)
+  linkedShipmentId String?          @map("linked_shipment_id")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  tenant        Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  originalOrder SalesOrder @relation(fields: [originalOrderId], references: [id])
+  customer      Customer   @relation(fields: [customerId], references: [id])
+  sku           Sku        @relation(fields: [skuId], references: [id])
+
+  @@index([tenantId])
+  @@index([originalOrderId])
+  @@index([customerId])
+  @@index([skuId])
+  @@index([status])
+  @@map("backorder_items")
+}
+
+enum BackorderStatus {
+  PENDING
+  PARTIALLY_FULFILLED
+  FULFILLED
+  CANCELLED
+}
+
+// ---- 盘点任务 (PRD 4.2.2 动销循环盘点) ----
+
+model StockCountTask {
+  id          String           @id @default(uuid())
+  tenantId    String           @map("tenant_id")
+  warehouseId String           @map("warehouse_id")
+  assigneeId  String?          @map("assignee_id")
+  status      StockCountStatus @default(PENDING)
+  notes       String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  completedAt DateTime?        @map("completed_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  warehouse Warehouse        @relation(fields: [warehouseId], references: [id])
+  items     StockCountItem[]
+
+  @@index([tenantId])
+  @@index([warehouseId])
+  @@index([assigneeId])
+  @@index([status])
+  @@map("stock_count_tasks")
+}
+
+model StockCountItem {
+  id               String @id @default(uuid())
+  stockCountTaskId String @map("stock_count_task_id")
+  skuId            String @map("sku_id")
+  binLocationId    String? @map("bin_location_id")
+  systemQty        Int    @map("system_qty")
+  actualQty        Int?   @map("actual_qty")
+  variance         Int?
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  task        StockCountTask @relation(fields: [stockCountTaskId], references: [id], onDelete: Cascade)
+  sku         Sku            @relation(fields: [skuId], references: [id])
+  binLocation BinLocation?   @relation(fields: [binLocationId], references: [id])
+
+  @@index([stockCountTaskId])
+  @@index([skuId])
+  @@map("stock_count_items")
+}
+
+enum StockCountStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ---- 收货质检 (PRD 4.1.2 卸柜盲收与质检) ----
+
+model ReceivingInspection {
+  id              String          @id @default(uuid())
+  tenantId        String          @map("tenant_id")
+  receiptId       String          @map("receipt_id")
+  skuId           String          @map("sku_id")
+  expectedQty     Int             @map("expected_qty")
+  actualQty       Int             @map("actual_qty")
+  damagedQty      Int             @default(0) @map("damaged_qty")
+  discrepancyType DiscrepancyType? @map("discrepancy_type")
+  photos          Json?
+  notes           String?
+  inspectedBy     String?         @map("inspected_by")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  receipt PurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  sku     Sku             @relation(fields: [skuId], references: [id])
+
+  @@index([tenantId])
+  @@index([receiptId])
+  @@index([skuId])
+  @@map("receiving_inspections")
+}
+
+// ---- 波次拣货 (PRD 4.3.1 Wave Picking) ----
+
+model PickWave {
+  id          String         @id @default(uuid())
+  tenantId    String         @map("tenant_id")
+  waveNumber  String         @map("wave_number")
+  warehouseId String         @map("warehouse_id")
+  status      PickWaveStatus @default(PENDING)
+  totalOrders Int            @default(0) @map("total_orders")
+  assigneeId  String?        @map("assignee_id")
+  startedAt   DateTime?      @map("started_at")
+  completedAt DateTime?      @map("completed_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
+  items     PickWaveItem[]
+
+  @@unique([waveNumber, tenantId])
+  @@index([tenantId])
+  @@index([warehouseId])
+  @@index([status])
+  @@map("pick_waves")
+}
+
+model PickWaveItem {
+  id            String  @id @default(uuid())
+  pickWaveId    String  @map("pick_wave_id")
+  salesOrderId  String  @map("sales_order_id")
+  skuId         String  @map("sku_id")
+  binLocationId String? @map("bin_location_id")
+  requiredQty   Int     @map("required_qty")
+  pickedQty     Int     @default(0) @map("picked_qty")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  pickWave    PickWave     @relation(fields: [pickWaveId], references: [id], onDelete: Cascade)
+  binLocation BinLocation? @relation(fields: [binLocationId], references: [id])
+
+  @@index([pickWaveId])
+  @@index([salesOrderId])
+  @@index([skuId])
+  @@map("pick_wave_items")
+}
+
+enum PickWaveStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }

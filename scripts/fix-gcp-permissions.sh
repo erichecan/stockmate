@@ -79,7 +79,7 @@ fi
 BUCKET_NAME="${PROJECT_ID}_cloudbuild"
 if ! gsutil ls -b "gs://${BUCKET_NAME}" 2>/dev/null; then
   echo "==> 创建 Cloud Build 默认 bucket..."
-  gsutil mb -p "$PROJECT_ID" -l us-central1 "gs://${BUCKET_NAME}" 2>/dev/null || echo "  (bucket 可能已存在或由 Cloud Build 自动创建)"
+  gsutil mb -p "$PROJECT_ID" -l europe-west1 "gs://${BUCKET_NAME}" 2>/dev/null || echo "  (bucket 可能已存在或由 Cloud Build 自动创建)"
 fi
 
 echo ""

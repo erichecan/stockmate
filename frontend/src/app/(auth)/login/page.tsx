@@ -1,11 +1,11 @@
 // 简化登录：默认只需邮箱+密码，公司标识可选并记住
-// Updated: 2026-02-28T15:00:00
+// Updated: 2026-03-15 测试账号一键填入，方便演示
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAuthStore } from '@/lib/auth-store';
@@ -23,6 +23,12 @@ import {
 
 const LAST_TENANT_KEY = 'lastTenantSlug';
 
+const TEST_ACCOUNT = {
+  email: 'admin@test.com',
+  password: 'Test1234!',
+  tenantSlug: 'test-company',
+};
+
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuthStore();
@@ -33,6 +39,12 @@ export default function LoginPage() {
   const [showCompany, setShowCompany] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tenantOptions, setTenantOptions] = useState<{ slug: string; name: string }[]>([]);
+
+  const fillTestAccount = () => {
+    setEmail(TEST_ACCOUNT.email);
+    setPassword(TEST_ACCOUNT.password);
+    setTenantSlug(TEST_ACCOUNT.tenantSlug);
+  };
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(LAST_TENANT_KEY) : null;
@@ -84,6 +96,40 @@ export default function LoginPage() {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
+          {/* 测试/演示账号：一键填入，常驻展示，方便演示 */}
+          <div className="overflow-hidden rounded-xl border border-border bg-muted/50">
+            <div className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-muted-foreground">
+              <Info className="h-4 w-4 shrink-0" aria-hidden />
+              <span>测试 / 演示账号</span>
+            </div>
+            <div className="border-t border-border px-4 pb-4 pt-2 text-xs text-muted-foreground">
+              <p className="mb-2">
+                邮箱{' '}
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-foreground">
+                  {TEST_ACCOUNT.email}
+                </kbd>
+                ，密码{' '}
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-foreground">
+                  {TEST_ACCOUNT.password}
+                </kbd>
+                ，公司标识{' '}
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-foreground">
+                  {TEST_ACCOUNT.tenantSlug}
+                </kbd>
+                。
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={fillTestAccount}
+              >
+                一键填入
+              </Button>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="email">邮箱</Label>
             <Input

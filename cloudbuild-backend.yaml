@@ -3,7 +3,7 @@
 # 用法: ./scripts/deploy-backend.sh  或  gcloud builds submit --config=cloudbuild-backend.yaml
 
 substitutions:
-  _REGION: us-central1
+  _REGION: europe-west1
   _BACKEND_SERVICE: stockmate-api
 
 steps:

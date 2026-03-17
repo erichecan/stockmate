@@ -1,0 +1,22 @@
+{
+  "name": "mobigo-scraper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mobigo wholesale site crawler (TypeScript + Playwright)",
+  "scripts": {
+    "login": "tsx login.ts",
+    "crawl:index": "tsx crawl-index.ts",
+    "crawl:products": "tsx crawl-product.ts"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "cheerio": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "playwright": "^1.58.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
+

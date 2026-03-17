@@ -34,16 +34,21 @@ export class WholesaleProductsController {
     private readonly inventoryService: InventoryService,
   ) {}
 
+  // Updated: 2026-03-17T00:21:00 - P0 闭环: 公共端点也加分页
   @Get('public/products')
   @Public()
   @ApiOperation({ summary: 'Public product list for wholesale site (no price/stock)' })
   @ApiQuery({ name: 'tenantSlug', required: true })
   @ApiQuery({ name: 'categoryId', required: false })
   @ApiQuery({ name: 'q', required: false, description: 'Search keyword' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   async getPublicProducts(
     @Query('tenantSlug') tenantSlug: string,
     @Query('categoryId') categoryId?: string,
     @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ): Promise<PublicProductListItemDto[]> {
     // 2026-03-15 修复：缺失 tenantSlug 时直接返回空数组，避免 trim 报错导致加载失败
     if (!tenantSlug?.trim()) {
@@ -70,10 +75,14 @@ export class WholesaleProductsController {
       ];
     }
 
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 50;
     const products = await this.prisma.product.findMany({
       where,
       include: { category: true, brand: true },
       orderBy: { createdAt: 'desc' },
+      skip: (pageNum - 1) * limitNum,
+      take: limitNum,
     });
 
     return products.map((p) => ({
@@ -119,17 +128,22 @@ export class WholesaleProductsController {
     };
   }
 
+  // Updated: 2026-03-17T00:20:00 - P0 闭环: 添加分页避免 N+1 查询超时
   @Get('products')
   @ApiOperation({
     summary: 'Wholesale product list for logged-in customer (with price/stock/minOrderQty)',
   })
   @ApiQuery({ name: 'categoryId', required: false })
   @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   async getWholesaleProducts(
     @CurrentUser('tenantId') tenantId: string,
     @CurrentUser('customerId') customerId: string,
     @Query('categoryId') categoryId?: string,
     @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ): Promise<WholesaleProductListItemDto[]> {
     const customer = await this.prisma.customer.findFirst({
       where: { id: customerId, tenantId },
@@ -137,6 +151,10 @@ export class WholesaleProductsController {
     if (!customer) {
       return [];
     }
+
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 50;
+    const skip = (pageNum - 1) * limitNum;
 
     const where: any = {
       tenantId,
@@ -160,6 +178,8 @@ export class WholesaleProductsController {
         skus: { where: { isActive: true }, orderBy: { code: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take: limitNum,
     });
 
     const result: WholesaleProductListItemDto[] = [];
