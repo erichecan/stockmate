@@ -1,4 +1,4 @@
-// Updated: 2026-03-14 - 阶段一底座：注册 ActionLogModule
+// Updated: 2026-03-17T12:00:00 - 后端第三部分：NotificationsModule、CashbookModule
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
@@ -25,6 +25,9 @@ import { GoodsOwnerModule } from './goods-owner/goods-owner.module';
 import { PrintSolutionModule } from './print-solution/print-solution.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { WholesaleModule } from './wholesale/wholesale.module';
+import { PricingModule } from './pricing/pricing.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { CashbookModule } from './cashbook/cashbook.module';
 
 @Module({
   imports: [
@@ -55,6 +58,9 @@ import { WholesaleModule } from './wholesale/wholesale.module';
     PrintSolutionModule,
     // Updated: 2026-03-14T15:34:00 - 批发站 P0: 挂载 WholesaleModule（批发站前台 API 聚合层）
     WholesaleModule,
+    PricingModule,
+    NotificationsModule,
+    CashbookModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

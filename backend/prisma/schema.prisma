@@ -16,56 +16,66 @@ datasource db {
 
 /// Tenant represents a company/organization using StockFlow
 model Tenant {
-  id          String       @id @default(uuid())
-  name        String
-  slug        String       @unique
-  dbName      String       @unique @map("db_name")
-  dbHost      String?      @map("db_host")
-  plan        TenantPlan   @default(FREE)
-  status      TenantStatus @default(ACTIVE)
-  maxUsers    Int          @default(5) @map("max_users")
-  contactName String?      @map("contact_name")
-  email       String
-  phone       String?
-  address     String?
-  logoUrl     String?      @map("logo_url")
+  id                 String       @id @default(uuid())
+  name               String
+  slug               String       @unique
+  dbName             String       @unique @map("db_name")
+  dbHost             String?      @map("db_host")
+  plan               TenantPlan   @default(FREE)
+  status             TenantStatus @default(ACTIVE)
+  maxUsers           Int          @default(5) @map("max_users")
+  contactName        String?      @map("contact_name")
+  email              String
+  phone              String?
+  address            String?
+  logoUrl            String?      @map("logo_url")
   // Updated: 2026-03-16T22:01:00 - PRD 2.2.3 整单 MOQ：订单最低金额
-  minOrderAmount Decimal?  @map("min_order_amount") @db.Decimal(12, 2)
+  minOrderAmount     Decimal?     @map("min_order_amount") @db.Decimal(12, 2)
   // Updated: 2026-03-16T22:01:00 - PRD 2.1.2 预售默认定金比例
-  defaultDepositRate Decimal? @default(0.30) @map("default_deposit_rate") @db.Decimal(3, 2)
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  defaultDepositRate Decimal?     @default(0.30) @map("default_deposit_rate") @db.Decimal(3, 2)
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
 
-  users             User[]
-  actionLogs        ActionLog[]
-  categories        Category[]
-  brands            Brand[]
-  products          Product[]
-  skus              Sku[]
-  suppliers         Supplier[]
-  warehouses        Warehouse[]
-  binLocations      BinLocation[]
-  purchaseOrders    PurchaseOrder[]
-  shipments         Shipment[]
-  purchaseReceipts  PurchaseReceipt[]
-  inventoryItems    InventoryItem[]
-  inventoryLedgers  InventoryLedger[]
-  customers         Customer[]
-  salesOrders       SalesOrder[]
-  stockFreezes      StockFreeze[]
-  goodsOwners       GoodsOwner[]
-  printSolutions    PrintSolution[]
-  wholesaleCart     WholesaleCartItem[]
-  customerPrices    CustomerPrice[]
-  skuUnits          SkuUnit[]
-  paymentRecords    PaymentRecord[]
-  invoices          Invoice[]
-  approvalRequests  ApprovalRequest[]
-  shiftHandovers    ShiftHandover[]
-  backorderItems    BackorderItem[]
-  stockCountTasks   StockCountTask[]
+  users                User[]
+  actionLogs           ActionLog[]
+  categories           Category[]
+  brands               Brand[]
+  products             Product[]
+  skus                 Sku[]
+  suppliers            Supplier[]
+  warehouses           Warehouse[]
+  binLocations         BinLocation[]
+  purchaseOrders       PurchaseOrder[]
+  shipments            Shipment[]
+  purchaseReceipts     PurchaseReceipt[]
+  inventoryItems       InventoryItem[]
+  inventoryLedgers     InventoryLedger[]
+  customers            Customer[]
+  salesOrders          SalesOrder[]
+  stockFreezes         StockFreeze[]
+  goodsOwners          GoodsOwner[]
+  printSolutions       PrintSolution[]
+  wholesaleCart        WholesaleCartItem[]
+  customerPrices       CustomerPrice[]
+  skuUnits             SkuUnit[]
+  paymentRecords       PaymentRecord[]
+  invoices             Invoice[]
+  approvalRequests     ApprovalRequest[]
+  shiftHandovers       ShiftHandover[]
+  backorderItems       BackorderItem[]
+  stockCountTasks      StockCountTask[]
   receivingInspections ReceivingInspection[]
-  pickWaves         PickWave[]
+  pickWaves            PickWave[]
+  // Updated: 2026-03-17T14:30:00 - 等级折扣配置
+  tierDiscountPolicies TierDiscountPolicy[]
+  // Updated: 2026-03-17T12:00:00 - 后端第三部分：出库通知
+  notificationEvents   NotificationEvent[]
+  // Updated: 2026-03-17T12:00:00 - 后端第三部分：现金账
+  cashbookSessions     CashbookSession[]
+  cashbookTransactions CashbookTransaction[]
+  // Updated: 2026-03-17T14:30:00 - 预售限购
+  preorderLimits       PreorderLimit[]
+  preorderTierLimits   PreorderTierLimit[]
 
   @@map("tenants")
 }
@@ -84,20 +94,20 @@ enum TenantStatus {
 
 /// Platform-level user record (auth + tenant association)
 model User {
-  id            String    @id @default(uuid())
-  email         String
-  passwordHash  String    @map("password_hash")
-  firstName     String?   @map("first_name")
-  lastName      String?   @map("last_name")
-  role          UserRole  @default(VIEWER)
-  isActive      Boolean   @default(true) @map("is_active")
-  lastLoginAt   DateTime? @map("last_login_at")
-  refreshToken  String?   @map("refresh_token")
-  tenantId      String    @map("tenant_id")
+  id           String    @id @default(uuid())
+  email        String
+  passwordHash String    @map("password_hash")
+  firstName    String?   @map("first_name")
+  lastName     String?   @map("last_name")
+  role         UserRole  @default(VIEWER)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  refreshToken String?   @map("refresh_token")
+  tenantId     String    @map("tenant_id")
   // Updated: 2026-03-14T18:00:00 - 批发站 P0: 账号可选绑定 Customer（用于零售商登录）
-  customerId    String?   @map("customer_id")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  customerId   String?   @map("customer_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer   Customer?   @relation(fields: [customerId], references: [id])
@@ -116,18 +126,18 @@ model User {
 /// 操作日志：记录关键业务操作，便于审计与追溯
 /// Updated: 2026-03-16T22:07:00 - PRD 3.1.2 审计日志：增强审计追踪字段
 model ActionLog {
-  id         String   @id @default(uuid())
-  tenantId   String   @map("tenant_id")
-  userId     String?  @map("user_id")
-  action     String
-  entityType String   @map("entity_type")
-  entityId   String?  @map("entity_id")
-  payload    Json?
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  userId      String?  @map("user_id")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  payload     Json?
   // PRD 3.1.2: beforeValue/afterValue 用于记录变更前后值
-  beforeValue Json?   @map("before_value")
-  afterValue  Json?   @map("after_value")
-  ipAddress   String? @map("ip_address")
-  createdAt  DateTime @default(now()) @map("created_at")
+  beforeValue Json?    @map("before_value")
+  afterValue  Json?    @map("after_value")
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -140,13 +150,15 @@ model ActionLog {
   @@map("action_logs")
 }
 
-// Updated: 2026-03-16T22:00:00 - PRD 3.1.1 权限矩阵：新增 FINANCE 角色
+// Updated: 2026-03-17T12:00:00 - 后端第三部分：新增 OPERATIONS、SALES_SUPERVISOR
 enum UserRole {
   SUPER_ADMIN
   ADMIN
   PURCHASER
   WAREHOUSE
   SALES
+  SALES_SUPERVISOR
+  OPERATIONS
   FINANCE
   VIEWER
 }
@@ -245,6 +257,8 @@ model Sku {
   retailPrice       Decimal? @map("retail_price") @db.Decimal(10, 2)
   // Updated: 2026-03-14T16:00:00 - 批发站 P0: 按 SKU 维度维护最小起订量
   minOrderQty       Int?     @map("min_order_qty")
+  // Updated: 2026-03-17T14:30:00 - SKU MOQ：优先使用，fallback 到 minOrderQty
+  moq               Int?     @default(1) @map("moq")
   // Updated: 2026-03-16T22:03:00 - PRD 4.2.3 安全库存与补货点
   safetyStock       Int?     @map("safety_stock")
   reorderPoint      Int?     @map("reorder_point")
@@ -256,20 +270,23 @@ model Sku {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  product            Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
-  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  poItems            PurchaseOrderItem[]
-  soItems            SalesOrderItem[]
-  inventoryItems     InventoryItem[]
-  inventoryLedgers   InventoryLedger[]
-  stockFreezes       StockFreeze[]
-  wholesaleCart       WholesaleCartItem[]
+  product              Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  poItems              PurchaseOrderItem[]
+  soItems              SalesOrderItem[]
+  inventoryItems       InventoryItem[]
+  inventoryLedgers     InventoryLedger[]
+  stockFreezes         StockFreeze[]
+  wholesaleCart        WholesaleCartItem[]
   // Updated: 2026-03-16T22:03:00 - PRD 新增关联
-  customerPrices     CustomerPrice[]
-  skuUnits           SkuUnit[]
-  backorderItems     BackorderItem[]
-  stockCountItems    StockCountItem[]
+  customerPrices       CustomerPrice[]
+  skuUnits             SkuUnit[]
+  backorderItems       BackorderItem[]
+  stockCountItems      StockCountItem[]
   receivingInspections ReceivingInspection[]
+  // Updated: 2026-03-17T14:30:00 - 预售限购
+  preorderLimits       PreorderLimit[]
+  preorderTierLimits   PreorderTierLimit[]
 
   @@unique([code, tenantId])
   @@index([productId])
@@ -284,20 +301,20 @@ model Sku {
 
 /// Supplier for purchasing
 model Supplier {
-  id          String   @id @default(uuid())
-  name        String
-  code        String
-  tenantId    String   @map("tenant_id")
-  contactName String?  @map("contact_name")
-  email       String?
-  phone       String?
-  address     String?
-  country     String?
-  paymentTerms String? @map("payment_terms")
-  leadTimeDays Int?    @map("lead_time_days")
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  name         String
+  code         String
+  tenantId     String   @map("tenant_id")
+  contactName  String?  @map("contact_name")
+  email        String?
+  phone        String?
+  address      String?
+  country      String?
+  paymentTerms String?  @map("payment_terms")
+  leadTimeDays Int?     @map("lead_time_days")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   purchaseOrders PurchaseOrder[]
@@ -321,15 +338,15 @@ model Warehouse {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  binLocations   BinLocation[]
-  inventoryItems  InventoryItem[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  binLocations     BinLocation[]
+  inventoryItems   InventoryItem[]
   inventoryLedgers InventoryLedger[]
-  salesOrders    SalesOrder[]
-  stockFreezes   StockFreeze[]
+  salesOrders      SalesOrder[]
+  stockFreezes     StockFreeze[]
   // Updated: 2026-03-16T22:10:00 - PRD 新增关联
-  stockCountTasks StockCountTask[]
-  pickWaves       PickWave[]
+  stockCountTasks  StockCountTask[]
+  pickWaves        PickWave[]
 
   @@unique([code, tenantId])
   @@index([tenantId])
@@ -351,10 +368,10 @@ model BinLocation {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  warehouse      Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  inventoryItems InventoryItem[]
-  stockFreezes   StockFreeze[]
+  warehouse       Warehouse        @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inventoryItems  InventoryItem[]
+  stockFreezes    StockFreeze[]
   // Updated: 2026-03-16T22:10:00 - PRD 新增关联
   stockCountItems StockCountItem[]
   pickWaveItems   PickWaveItem[]
@@ -367,18 +384,18 @@ model BinLocation {
 
 /// Purchase Order
 model PurchaseOrder {
-  id             String        @id @default(uuid())
-  orderNumber    String        @map("order_number")
-  tenantId       String        @map("tenant_id")
-  supplierId     String        @map("supplier_id")
-  status         POStatus      @default(DRAFT)
-  totalAmount    Decimal?      @map("total_amount") @db.Decimal(12, 2)
-  currency       String        @default("USD")
-  notes          String?
-  orderedAt      DateTime?     @map("ordered_at")
-  expectedAt     DateTime?     @map("expected_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  id          String    @id @default(uuid())
+  orderNumber String    @map("order_number")
+  tenantId    String    @map("tenant_id")
+  supplierId  String    @map("supplier_id")
+  status      POStatus  @default(DRAFT)
+  totalAmount Decimal?  @map("total_amount") @db.Decimal(12, 2)
+  currency    String    @default("USD")
+  notes       String?
+  orderedAt   DateTime? @map("ordered_at")
+  expectedAt  DateTime? @map("expected_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   supplier  Supplier            @relation(fields: [supplierId], references: [id])
@@ -443,8 +460,8 @@ model Shipment {
   // Updated: 2026-03-16T22:05:00 - PRD 4.1.1/2.1.2 预售联动
   preorderEnabled Boolean @default(false) @map("preorder_enabled")
 
-  purchaseOrder PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder     @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   packingLists  PackingListItem[]
 
   @@index([purchaseOrderId])
@@ -452,13 +469,16 @@ model Shipment {
   @@map("shipments")
 }
 
-// Updated: 2026-03-16T22:00:00 - PRD 4.1.1 到柜预报状态流转
+// Updated: 2026-03-17T12:00:00 - 到柜预报增强：ARRIVED_PORT、AT_WAREHOUSE_PENDING_UNLOAD、UNLOADING_COUNTING_RECEIVING
 enum ShipmentStatus {
   PENDING
   LOADING
   LOADED
   IN_TRANSIT
   ARRIVED
+  ARRIVED_PORT
+  AT_WAREHOUSE_PENDING_UNLOAD
+  UNLOADING_COUNTING_RECEIVING
   RECEIVING
   DELIVERED
   COMPLETED
@@ -496,8 +516,8 @@ model PurchaseReceipt {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   items         ReceiptItem[]
   // Updated: 2026-03-16T22:10:00 - PRD 4.1.2 质检关联
   inspections   ReceivingInspection[]
@@ -511,27 +531,27 @@ model PurchaseReceipt {
 // 阶段二收货流程：6 状态/6 Tab（参考 ModernWMS Asn asn_status 0~4）
 // 2026-03-14 扩展多阶段，保留 PENDING/IN_PROGRESS 以兼容旧数据
 enum ReceiptStatus {
-  PENDING           // 兼容旧数据，迁移为 PENDING_ARRIVAL
-  IN_PROGRESS       // 兼容旧数据，迁移为 ARRIVED
-  PENDING_ARRIVAL   // 待到货（Tab 2）
-  ARRIVED           // 待卸货（Tab 3）
-  UNLOADED          // 待分拣（Tab 4）
-  SORTED            // 待上架（Tab 5）
-  COMPLETED         // 到货明细（Tab 6）
-  CANCELLED         // 已取消
+  PENDING // 兼容旧数据，迁移为 PENDING_ARRIVAL
+  IN_PROGRESS // 兼容旧数据，迁移为 ARRIVED
+  PENDING_ARRIVAL // 待到货（Tab 2）
+  ARRIVED // 待卸货（Tab 3）
+  UNLOADED // 待分拣（Tab 4）
+  SORTED // 待上架（Tab 5）
+  COMPLETED // 到货明细（Tab 6）
+  CANCELLED // 已取消
 }
 
 /// Receipt line item with discrepancy tracking
 model ReceiptItem {
-  id              String            @id @default(uuid())
-  receiptId       String            @map("receipt_id")
-  poItemId        String            @map("po_item_id")
-  expectedQty     Int               @map("expected_qty")
-  receivedQty     Int               @map("received_qty")
-  damagedQty      Int               @default(0) @map("damaged_qty")
-  discrepancyType DiscrepancyType?  @map("discrepancy_type")
+  id              String           @id @default(uuid())
+  receiptId       String           @map("receipt_id")
+  poItemId        String           @map("po_item_id")
+  expectedQty     Int              @map("expected_qty")
+  receivedQty     Int              @map("received_qty")
+  damagedQty      Int              @default(0) @map("damaged_qty")
+  discrepancyType DiscrepancyType? @map("discrepancy_type")
   notes           String?
-  createdAt       DateTime          @default(now()) @map("created_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
 
   receipt PurchaseReceipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   poItem  PurchaseOrderItem @relation(fields: [poItemId], references: [id])
@@ -572,17 +592,17 @@ model InventoryItem {
 
 /// Inventory ledger - immutable log of all stock movements
 model InventoryLedger {
-  id            String       @id @default(uuid())
-  skuId         String       @map("sku_id")
-  warehouseId   String       @map("warehouse_id")
-  tenantId      String       @map("tenant_id")
+  id            String     @id @default(uuid())
+  skuId         String     @map("sku_id")
+  warehouseId   String     @map("warehouse_id")
+  tenantId      String     @map("tenant_id")
   type          LedgerType
   quantity      Int
-  referenceType String?      @map("reference_type")
-  referenceId   String?      @map("reference_id")
+  referenceType String?    @map("reference_type")
+  referenceId   String?    @map("reference_id")
   notes         String?
-  operatorId    String?      @map("operator_id")
-  createdAt     DateTime     @default(now()) @map("created_at")
+  operatorId    String?    @map("operator_id")
+  createdAt     DateTime   @default(now()) @map("created_at")
 
   sku       Sku       @relation(fields: [skuId], references: [id])
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
@@ -612,20 +632,20 @@ enum LedgerType {
 
 /// 库存冻结单：记录冻结/解冻操作，与 InventoryItem.lockedQty 联动
 model StockFreeze {
-  id            String           @id @default(uuid())
-  tenantId      String           @map("tenant_id")
-  skuId         String           @map("sku_id")
-  warehouseId   String           @map("warehouse_id")
-  binLocationId String?          @map("bin_location_id")
+  id            String            @id @default(uuid())
+  tenantId      String            @map("tenant_id")
+  skuId         String            @map("sku_id")
+  warehouseId   String            @map("warehouse_id")
+  binLocationId String?           @map("bin_location_id")
   quantity      Int
   reason        String?
   status        StockFreezeStatus @default(ACTIVE)
-  createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @updatedAt @map("updated_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
 
-  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sku        Sku          @relation(fields: [skuId], references: [id])
-  warehouse  Warehouse    @relation(fields: [warehouseId], references: [id])
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sku         Sku          @relation(fields: [skuId], references: [id])
+  warehouse   Warehouse    @relation(fields: [warehouseId], references: [id])
   binLocation BinLocation? @relation(fields: [binLocationId], references: [id])
 
   @@index([tenantId])
@@ -647,31 +667,31 @@ enum StockFreezeStatus {
 // ============================================================
 
 model Customer {
-  id          String       @id @default(uuid())
-  name        String
-  code        String
-  tenantId    String       @map("tenant_id")
-  contactName String?      @map("contact_name")
-  email       String?
-  phone       String?
-  address     String?
-  city        String?
-  country     String?
-  tier        CustomerTier @default(NORMAL)
-  isActive    Boolean      @default(true) @map("is_active")
-  notes       String?
+  id                 String       @id @default(uuid())
+  name               String
+  code               String
+  tenantId           String       @map("tenant_id")
+  contactName        String?      @map("contact_name")
+  email              String?
+  phone              String?
+  address            String?
+  city               String?
+  country            String?
+  tier               CustomerTier @default(NORMAL)
+  isActive           Boolean      @default(true) @map("is_active")
+  notes              String?
   // Updated: 2026-03-16T22:02:00 - PRD 3.2.3 信用额度锁单
-  creditLimit        Decimal?  @map("credit_limit") @db.Decimal(12, 2)
-  outstandingBalance Decimal   @default(0) @map("outstanding_balance") @db.Decimal(12, 2)
-  creditFrozen       Boolean   @default(false) @map("credit_frozen")
-  paymentTermDays    Int       @default(30) @map("payment_term_days")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  creditLimit        Decimal?     @map("credit_limit") @db.Decimal(12, 2)
+  outstandingBalance Decimal      @default(0) @map("outstanding_balance") @db.Decimal(12, 2)
+  creditFrozen       Boolean      @default(false) @map("credit_frozen")
+  paymentTermDays    Int          @default(30) @map("payment_term_days")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
 
-  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   salesOrders    SalesOrder[]
   users          User[]
-  wholesaleCart   WholesaleCartItem[]
+  wholesaleCart  WholesaleCartItem[]
   // Updated: 2026-03-16T22:02:00 - PRD 新增关联
   customerPrices CustomerPrice[]
   paymentRecords PaymentRecord[]
@@ -688,6 +708,25 @@ enum CustomerTier {
   SILVER
   GOLD
   VIP
+}
+
+// Updated: 2026-03-17T14:30:00 - 等级折扣配置：按租户+等级维护折扣比例
+model TierDiscountPolicy {
+  id              String       @id @default(uuid())
+  tenantId        String       @map("tenant_id")
+  tier            CustomerTier
+  discountPercent Decimal      @map("discount_percent") @db.Decimal(5, 2)
+  isActive        Boolean      @default(true) @map("is_active")
+  effectiveFrom   DateTime?    @map("effective_from")
+  effectiveTo     DateTime?    @map("effective_to")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, tier])
+  @@index([tenantId])
+  @@map("tier_discount_policies")
 }
 
 // ============================================================
@@ -721,19 +760,19 @@ model GoodsOwner {
 // ============================================================
 
 enum PrintDocumentType {
-  OUTBOUND_SHEET  // 出库单
-  INBOUND_SHEET   // 入库单
-  PICK_LIST       // 拣货单
+  OUTBOUND_SHEET // 出库单
+  INBOUND_SHEET // 入库单
+  PICK_LIST // 拣货单
 }
 
 model PrintSolution {
   id             String            @id @default(uuid())
   tenantId       String            @map("tenant_id")
-  documentType   PrintDocumentType  @map("document_type")
+  documentType   PrintDocumentType @map("document_type")
   name           String            @map("name")
   templateBody   String            @map("template_body") @db.Text
   reportWidthMm  Decimal?          @map("report_width_mm") @db.Decimal(8, 2)
-  reportHeightMm Decimal?         @map("report_height_mm") @db.Decimal(8, 2)
+  reportHeightMm Decimal?          @map("report_height_mm") @db.Decimal(8, 2)
   isDefault      Boolean           @default(false) @map("is_default")
   sortOrder      Int               @default(0) @map("sort_order")
   createdAt      DateTime          @default(now()) @map("created_at")
@@ -747,33 +786,33 @@ model PrintSolution {
 }
 
 model SalesOrder {
-  id          String       @id @default(uuid())
-  orderNumber String       @map("order_number")
-  tenantId    String       @map("tenant_id")
-  customerId  String       @map("customer_id")
-  warehouseId String       @map("warehouse_id")
-  status      SOStatus     @default(PENDING)
-  totalAmount Decimal?     @map("total_amount") @db.Decimal(12, 2)
-  currency    String       @default("EUR")
-  notes       String?
-  source      OrderSource  @default(MANUAL)
-  externalId  String?      @map("external_id")
+  id               String      @id @default(uuid())
+  orderNumber      String      @map("order_number")
+  tenantId         String      @map("tenant_id")
+  customerId       String      @map("customer_id")
+  warehouseId      String      @map("warehouse_id")
+  status           SOStatus    @default(PENDING)
+  totalAmount      Decimal?    @map("total_amount") @db.Decimal(12, 2)
+  currency         String      @default("EUR")
+  notes            String?
+  source           OrderSource @default(MANUAL)
+  externalId       String?     @map("external_id")
   // Updated: 2026-03-16T22:06:00 - PRD 3.2.1 代客下单：记录操作人 ID
-  createdByUserId String?  @map("created_by_user_id")
+  createdByUserId  String?     @map("created_by_user_id")
   // Updated: 2026-03-16T22:06:00 - PRD 2.1.2 预售订单定金
-  depositAmount   Decimal? @map("deposit_amount") @db.Decimal(12, 2)
-  depositPaid     Boolean  @default(false) @map("deposit_paid")
+  depositAmount    Decimal?    @map("deposit_amount") @db.Decimal(12, 2)
+  depositPaid      Boolean     @default(false) @map("deposit_paid")
   // Updated: 2026-03-16T22:06:00 - PRD 3.2.2 智能拆单追溯
-  splitFromOrderId String? @map("split_from_order_id")
-  orderedAt   DateTime?    @map("ordered_at")
-  shippedAt   DateTime?    @map("shipped_at")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  splitFromOrderId String?     @map("split_from_order_id")
+  orderedAt        DateTime?   @map("ordered_at")
+  shippedAt        DateTime?   @map("shipped_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
 
-  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customer  Customer        @relation(fields: [customerId], references: [id])
-  warehouse Warehouse       @relation(fields: [warehouseId], references: [id])
-  items     SalesOrderItem[]
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer       Customer         @relation(fields: [customerId], references: [id])
+  warehouse      Warehouse        @relation(fields: [warehouseId], references: [id])
+  items          SalesOrderItem[]
   // Updated: 2026-03-16T22:06:00 - PRD 新增关联
   backorderItems BackorderItem[]
   invoices       Invoice[]
@@ -802,8 +841,9 @@ model SalesOrderItem {
   @@map("sales_order_items")
 }
 
-// Updated: 2026-03-16T22:00:00 - PRD 3.2.2 智能拆单：新增 PARTIALLY_FULFILLED
+// Updated: 2026-03-17T12:00:00 - 批发 DRAFT 订单：新增 DRAFT 状态
 enum SOStatus {
+  DRAFT
   PENDING
   CONFIRMED
   PICKING
@@ -814,13 +854,14 @@ enum SOStatus {
   CANCELLED
 }
 
-// Updated: 2026-03-16T22:00:00 - PRD 3.2.1/2.1.2 订单来源：新增 SALES_REP, PREORDER
+// Updated: 2026-03-17T12:00:00 - 批发再来一单：新增 REORDER_MERGED
 enum OrderSource {
   MANUAL
   SHOPIFY
   WHOLESALE_SITE
   SALES_REP
   PREORDER
+  REORDER_MERGED
 }
 
 // ============================================================
@@ -878,12 +919,12 @@ model CustomerPrice {
 // ---- SKU 多单位换算 (PRD 2.2.2 多单位自动换算) ----
 
 model SkuUnit {
-  id               String  @id @default(uuid())
-  skuId            String  @map("sku_id")
-  tenantId         String  @map("tenant_id")
-  unitName         String  @map("unit_name")
-  conversionFactor Int     @map("conversion_factor")
-  isBaseUnit       Boolean @default(false) @map("is_base_unit")
+  id               String   @id @default(uuid())
+  skuId            String   @map("sku_id")
+  tenantId         String   @map("tenant_id")
+  unitName         String   @map("unit_name")
+  conversionFactor Int      @map("conversion_factor")
+  isBaseUnit       Boolean  @default(false) @map("is_base_unit")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
@@ -894,6 +935,43 @@ model SkuUnit {
   @@index([tenantId])
   @@index([skuId])
   @@map("sku_units")
+}
+
+// ---- 预售限购 (2026-03-17T14:30:00 批发 DRAFT 第二部分：统一限购) ----
+model PreorderLimit {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  skuId          String   @map("sku_id")
+  maxQtyPerOrder Int      @map("max_qty_per_order")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sku    Sku    @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, skuId])
+  @@index([tenantId])
+  @@index([skuId])
+  @@map("preorder_limits")
+}
+
+// ---- 预售限购 (2026-03-17T14:30:00 批发 DRAFT 第二部分：等级限购，优先级高于统一配置) ----
+model PreorderTierLimit {
+  id             String       @id @default(uuid())
+  tenantId       String       @map("tenant_id")
+  skuId          String       @map("sku_id")
+  tier           CustomerTier @map("tier")
+  maxQtyPerOrder Int          @map("max_qty_per_order")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sku    Sku    @relation(fields: [skuId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, skuId, tier])
+  @@index([tenantId])
+  @@index([skuId])
+  @@map("preorder_tier_limits")
 }
 
 // ---- 收款记录 (PRD 3.2.3 信用额度锁单 - 恢复条件：客户付款登记) ----
@@ -930,22 +1008,22 @@ enum PaymentMethod {
 // ---- 发票/账单 (PRD 2.1.1 本月待结欠款 + 3.2.4 对账单) ----
 
 model Invoice {
-  id          String        @id @default(uuid())
-  invoiceNo   String        @map("invoice_no")
-  tenantId    String        @map("tenant_id")
-  customerId  String        @map("customer_id")
-  orderId     String?       @map("order_id")
-  amount      Decimal       @db.Decimal(12, 2)
-  paidAmount  Decimal       @default(0) @map("paid_amount") @db.Decimal(12, 2)
-  status      InvoiceStatus @default(UNPAID)
-  dueDate     DateTime?     @map("due_date")
-  issuedAt    DateTime      @default(now()) @map("issued_at")
-  paidAt      DateTime?     @map("paid_at")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id         String        @id @default(uuid())
+  invoiceNo  String        @map("invoice_no")
+  tenantId   String        @map("tenant_id")
+  customerId String        @map("customer_id")
+  orderId    String?       @map("order_id")
+  amount     Decimal       @db.Decimal(12, 2)
+  paidAmount Decimal       @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  status     InvoiceStatus @default(UNPAID)
+  dueDate    DateTime?     @map("due_date")
+  issuedAt   DateTime      @default(now()) @map("issued_at")
+  paidAt     DateTime?     @map("paid_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
 
-  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customer Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
   order    SalesOrder? @relation(fields: [orderId], references: [id])
 
   @@unique([invoiceNo, tenantId])
@@ -1009,21 +1087,21 @@ enum ApprovalStatus {
 // ---- 交接班记录 (PRD 3.1.3 交接班强制对账) ----
 
 model ShiftHandover {
-  id              String             @id @default(uuid())
-  tenantId        String             @map("tenant_id")
-  operatorId      String             @map("operator_id")
-  shiftStart      DateTime           @map("shift_start")
-  shiftEnd        DateTime?          @map("shift_end")
-  totalOrders     Int                @default(0) @map("total_orders")
-  expectedCash    Decimal            @default(0) @map("expected_cash") @db.Decimal(12, 2)
-  actualCash      Decimal?           @map("actual_cash") @db.Decimal(12, 2)
-  creditSales     Decimal            @default(0) @map("credit_sales") @db.Decimal(12, 2)
-  variance        Decimal?           @db.Decimal(12, 2)
-  varianceReason  String?            @map("variance_reason")
-  evidencePhotos  Json?              @map("evidence_photos")
-  status          ShiftHandoverStatus @default(ACTIVE)
-  createdAt       DateTime           @default(now()) @map("created_at")
-  updatedAt       DateTime           @updatedAt @map("updated_at")
+  id             String              @id @default(uuid())
+  tenantId       String              @map("tenant_id")
+  operatorId     String              @map("operator_id")
+  shiftStart     DateTime            @map("shift_start")
+  shiftEnd       DateTime?           @map("shift_end")
+  totalOrders    Int                 @default(0) @map("total_orders")
+  expectedCash   Decimal             @default(0) @map("expected_cash") @db.Decimal(12, 2)
+  actualCash     Decimal?            @map("actual_cash") @db.Decimal(12, 2)
+  creditSales    Decimal             @default(0) @map("credit_sales") @db.Decimal(12, 2)
+  variance       Decimal?            @db.Decimal(12, 2)
+  varianceReason String?             @map("variance_reason")
+  evidencePhotos Json?               @map("evidence_photos")
+  status         ShiftHandoverStatus @default(ACTIVE)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1044,17 +1122,17 @@ enum ShiftHandoverStatus {
 // ---- 欠货池 (PRD 3.2.2 智能拆单与欠货记录) ----
 
 model BackorderItem {
-  id              String            @id @default(uuid())
-  tenantId        String            @map("tenant_id")
-  originalOrderId String            @map("original_order_id")
-  customerId      String            @map("customer_id")
-  skuId           String            @map("sku_id")
-  backorderQty    Int               @map("backorder_qty")
-  fulfilledQty    Int               @default(0) @map("fulfilled_qty")
-  status          BackorderStatus   @default(PENDING)
-  linkedShipmentId String?          @map("linked_shipment_id")
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
+  id               String          @id @default(uuid())
+  tenantId         String          @map("tenant_id")
+  originalOrderId  String          @map("original_order_id")
+  customerId       String          @map("customer_id")
+  skuId            String          @map("sku_id")
+  backorderQty     Int             @map("backorder_qty")
+  fulfilledQty     Int             @default(0) @map("fulfilled_qty")
+  status           BackorderStatus @default(PENDING)
+  linkedShipmentId String?         @map("linked_shipment_id")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
 
   tenant        Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   originalOrder SalesOrder @relation(fields: [originalOrderId], references: [id])
@@ -1101,12 +1179,12 @@ model StockCountTask {
 }
 
 model StockCountItem {
-  id               String @id @default(uuid())
-  stockCountTaskId String @map("stock_count_task_id")
-  skuId            String @map("sku_id")
-  binLocationId    String? @map("bin_location_id")
-  systemQty        Int    @map("system_qty")
-  actualQty        Int?   @map("actual_qty")
+  id               String   @id @default(uuid())
+  stockCountTaskId String   @map("stock_count_task_id")
+  skuId            String   @map("sku_id")
+  binLocationId    String?  @map("bin_location_id")
+  systemQty        Int      @map("system_qty")
+  actualQty        Int?     @map("actual_qty")
   variance         Int?
   notes            String?
   createdAt        DateTime @default(now()) @map("created_at")
@@ -1130,18 +1208,18 @@ enum StockCountStatus {
 // ---- 收货质检 (PRD 4.1.2 卸柜盲收与质检) ----
 
 model ReceivingInspection {
-  id              String          @id @default(uuid())
-  tenantId        String          @map("tenant_id")
-  receiptId       String          @map("receipt_id")
-  skuId           String          @map("sku_id")
-  expectedQty     Int             @map("expected_qty")
-  actualQty       Int             @map("actual_qty")
-  damagedQty      Int             @default(0) @map("damaged_qty")
+  id              String           @id @default(uuid())
+  tenantId        String           @map("tenant_id")
+  receiptId       String           @map("receipt_id")
+  skuId           String           @map("sku_id")
+  expectedQty     Int              @map("expected_qty")
+  actualQty       Int              @map("actual_qty")
+  damagedQty      Int              @default(0) @map("damaged_qty")
   discrepancyType DiscrepancyType? @map("discrepancy_type")
   photos          Json?
   notes           String?
-  inspectedBy     String?         @map("inspected_by")
-  createdAt       DateTime        @default(now()) @map("created_at")
+  inspectedBy     String?          @map("inspected_by")
+  createdAt       DateTime         @default(now()) @map("created_at")
 
   tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   receipt PurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
@@ -1180,13 +1258,13 @@ model PickWave {
 }
 
 model PickWaveItem {
-  id            String  @id @default(uuid())
-  pickWaveId    String  @map("pick_wave_id")
-  salesOrderId  String  @map("sales_order_id")
-  skuId         String  @map("sku_id")
-  binLocationId String? @map("bin_location_id")
-  requiredQty   Int     @map("required_qty")
-  pickedQty     Int     @default(0) @map("picked_qty")
+  id            String   @id @default(uuid())
+  pickWaveId    String   @map("pick_wave_id")
+  salesOrderId  String   @map("sales_order_id")
+  skuId         String   @map("sku_id")
+  binLocationId String?  @map("bin_location_id")
+  requiredQty   Int      @map("required_qty")
+  pickedQty     Int      @default(0) @map("picked_qty")
   createdAt     DateTime @default(now()) @map("created_at")
 
   pickWave    PickWave     @relation(fields: [pickWaveId], references: [id], onDelete: Cascade)
@@ -1203,4 +1281,84 @@ enum PickWaveStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+// ============================================================
+// 后端第三部分：出库通知 (2026-03-17T12:00:00)
+// ============================================================
+
+model NotificationEvent {
+  id               String    @id @default(uuid())
+  tenantId         String    @map("tenant_id")
+  type             String    @map("type")
+  title            String?
+  body             String?   @db.Text
+  payload          Json?
+  targetUserId     String?   @map("target_user_id")
+  targetCustomerId String?   @map("target_customer_id")
+  readAt           DateTime? @map("read_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([targetUserId])
+  @@index([targetCustomerId])
+  @@index([createdAt])
+  @@map("notification_events")
+}
+
+// ============================================================
+// 后端第三部分：现金账 (2026-03-17T12:00:00)
+// ============================================================
+
+model CashbookSession {
+  id          String                @id @default(uuid())
+  tenantId    String                @map("tenant_id")
+  operatorId  String                @map("operator_id")
+  openedAt    DateTime              @map("opened_at")
+  closedAt    DateTime?             @map("closed_at")
+  openingCash Decimal?              @map("opening_cash") @db.Decimal(12, 2)
+  closingCash Decimal?              @map("closing_cash") @db.Decimal(12, 2)
+  status      CashbookSessionStatus @default(OPEN)
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions CashbookTransaction[]
+
+  @@index([tenantId])
+  @@index([operatorId])
+  @@index([openedAt])
+  @@map("cashbook_sessions")
+}
+
+enum CashbookSessionStatus {
+  OPEN
+  CLOSED
+}
+
+model CashbookTransaction {
+  id            String                  @id @default(uuid())
+  tenantId      String                  @map("tenant_id")
+  sessionId     String                  @map("session_id")
+  type          CashbookTransactionType
+  amount        Decimal                 @db.Decimal(12, 2)
+  description   String?
+  referenceType String?                 @map("reference_type")
+  referenceId   String?                 @map("reference_id")
+  createdAt     DateTime                @default(now()) @map("created_at")
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session CashbookSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("cashbook_transactions")
+}
+
+enum CashbookTransactionType {
+  IN
+  OUT
 }

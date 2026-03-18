@@ -1,4 +1,4 @@
-// Updated: 2026-03-14T17:30:00 - 批发站 P0: 下单与查单接口
+// Updated: 2026-03-17T14:30:00 - 批发 DRAFT：pay、PATCH items、预售限购校验
 import {
   BadRequestException,
   Controller,
@@ -7,6 +7,7 @@ import {
   Post,
   Body,
   Query,
+  Patch,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -18,8 +19,12 @@ import {
 import { OrderSource, SOStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SalesOrdersService } from '../sales-orders/sales-orders.service';
+import { WholesaleOrdersService } from './wholesale-orders.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { CreateWholesaleOrderFromCartDto } from './dto/wholesale-orders.dto';
+import {
+  CreateWholesaleOrderFromCartDto,
+  PatchDraftItemsDto,
+} from './dto/wholesale-orders.dto';
 
 @ApiTags('Wholesale Orders')
 @ApiBearerAuth()
@@ -28,6 +33,7 @@ export class WholesaleOrdersController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly salesOrdersService: SalesOrdersService,
+    private readonly wholesaleOrdersService: WholesaleOrdersService,
   ) {}
 
   @Post()
@@ -79,15 +85,23 @@ export class WholesaleOrdersController {
       warehouseId = fallbackWarehouse.id;
     }
 
+    const items = cartItems.map((item) => ({
+      skuId: item.skuId,
+      quantity: item.quantity,
+    }));
+
+    await this.wholesaleOrdersService.validatePreorderLimits(
+      tenantId,
+      customerId,
+      items,
+    );
+
     const createDto = {
       customerId,
       warehouseId,
       currency: 'EUR',
       notes: body.notes,
-      items: cartItems.map((item) => ({
-        skuId: item.skuId,
-        quantity: item.quantity,
-      })),
+      items,
     };
 
     const order = await this.salesOrdersService.create(
@@ -130,8 +144,7 @@ export class WholesaleOrdersController {
 
   @Get(':id')
   @ApiOperation({
-    summary:
-      '获取订单详情（必须校验订单归属当前 customer，否则返回 404）',
+    summary: '获取订单详情（必须校验订单归属当前 customer，否则返回 404）',
   })
   async findMyOrderDetail(
     @Param('id') id: string,
@@ -144,5 +157,34 @@ export class WholesaleOrdersController {
     }
     return order;
   }
-}
 
+  @Post(':id/pay')
+  @ApiOperation({
+    summary: 'DRAFT 订单支付，转为 PENDING 进入正式流程',
+  })
+  async payDraft(
+    @Param('id') id: string,
+    @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('customerId') customerId: string,
+  ) {
+    return this.wholesaleOrdersService.payDraft(id, tenantId, customerId);
+  }
+
+  @Patch(':id/items')
+  @ApiOperation({
+    summary: '编辑 DRAFT 订单行（全量覆盖 items）',
+  })
+  async patchDraftItems(
+    @Param('id') id: string,
+    @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('customerId') customerId: string,
+    @Body() body: PatchDraftItemsDto,
+  ) {
+    return this.wholesaleOrdersService.patchDraftItems(
+      id,
+      tenantId,
+      customerId,
+      body.items,
+    );
+  }
+}

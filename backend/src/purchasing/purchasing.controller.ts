@@ -1,4 +1,4 @@
-// Updated: 2026-02-28T10:00:00
+// Updated: 2026-03-17T12:00:00 - 后端第三部分：到柜预报 forecast/status/items-with-stock
 import {
   Body,
   Controller,
@@ -23,7 +23,11 @@ import { CreateShipmentDto } from './dto/create-shipment.dto';
 import { UpdateShipmentDto } from './dto/update-shipment.dto';
 import { AddPackingItemsDto } from './dto/add-packing-items.dto';
 import { CreateReceiptDto } from './dto/create-receipt.dto';
-import { ReceiptIdsDto, PutawayCompleteDto } from './dto/receipt-phase-actions.dto';
+import {
+  ReceiptIdsDto,
+  PutawayCompleteDto,
+} from './dto/receipt-phase-actions.dto';
+import { PatchShipmentStatusDto } from './dto/patch-shipment-status.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { POStatus } from '@prisma/client';
 
@@ -141,6 +145,38 @@ export class PurchasingController {
     return this.purchasingService.findShipments(tenantId, purchaseOrderId);
   }
 
+  @Get('shipments/forecast')
+  @ApiOperation({ summary: '到柜预报：即将到港/到仓的 shipments' })
+  @ApiResponse({ status: 200, description: 'Forecast shipments list' })
+  async getShipmentsForecast(@CurrentUser('tenantId') tenantId: string) {
+    return this.purchasingService.getShipmentsForecast(tenantId);
+  }
+
+  @Patch('shipments/:id/status')
+  @ApiOperation({ summary: 'Update shipment status' })
+  @ApiResponse({ status: 200, description: 'Shipment status updated' })
+  @ApiResponse({ status: 404, description: 'Shipment not found' })
+  async patchShipmentStatus(
+    @Param('id') id: string,
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: PatchShipmentStatusDto,
+  ) {
+    return this.purchasingService.patchShipmentStatus(id, tenantId, dto.status);
+  }
+
+  @Get('shipments/:id/items-with-stock')
+  @ApiOperation({
+    summary: 'Packing list items with current inventory availability',
+  })
+  @ApiResponse({ status: 200, description: 'Items with stock availability' })
+  @ApiResponse({ status: 404, description: 'Shipment not found' })
+  async getShipmentItemsWithStock(
+    @Param('id') id: string,
+    @CurrentUser('tenantId') tenantId: string,
+  ) {
+    return this.purchasingService.getShipmentItemsWithStock(id, tenantId);
+  }
+
   // ==================== Packing Lists ====================
 
   @Post('shipments/:shipmentId/packing')
@@ -189,7 +225,11 @@ export class PurchasingController {
 
   @Get('receipts/by-phase')
   @ApiOperation({ summary: '按阶段分页查询收货列表（6 Tab）' })
-  @ApiQuery({ name: 'phase', required: true, description: 'NOTICE|PENDING_ARRIVAL|ARRIVED|UNLOADED|SORTED|COMPLETED' })
+  @ApiQuery({
+    name: 'phase',
+    required: true,
+    description: 'NOTICE|PENDING_ARRIVAL|ARRIVED|UNLOADED|SORTED|COMPLETED',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: '分页收货列表' })
@@ -248,6 +288,11 @@ export class PurchasingController {
     @CurrentUser('sub') userId: string,
     @Body() dto: PutawayCompleteDto,
   ) {
-    return this.purchasingService.putawayComplete(tenantId, userId, receiptId, dto);
+    return this.purchasingService.putawayComplete(
+      tenantId,
+      userId,
+      receiptId,
+      dto,
+    );
   }
 }

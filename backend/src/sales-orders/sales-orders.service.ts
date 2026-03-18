@@ -1,18 +1,27 @@
 // Phase 3: Sales Orders Service
-// Updated: 2026-03-14T17:40:00 - 批发站 P0: 支持订单来源（OrderSource）
+// Updated: 2026-03-17T14:30:00 - 批发 DRAFT：create 支持可选 status
+// Updated: 2026-03-17T14:33:00 - getUnitPrice 优先读 DB tier 折扣，fallback 硬编码
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CustomerTier, OrderSource, Prisma, SOStatus } from '@prisma/client';
+import {
+  CustomerTier,
+  OrderSource,
+  Prisma,
+  SOStatus,
+  UserRole,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { PricingService } from '../pricing/pricing.service';
 import { PaginatedResponseDto } from '../common/dto/pagination.dto';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
 import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 
-const TIER_DISCOUNT: Record<CustomerTier, number> = {
+const TIER_DISCOUNT_FALLBACK: Record<CustomerTier, number> = {
   NORMAL: 1.0,
   SILVER: 0.98,
   GOLD: 0.95,
@@ -30,12 +39,22 @@ export class SalesOrdersService {
   constructor(
     private prisma: PrismaService,
     private inventory: InventoryService,
+    private notificationsService: NotificationsService,
+    private pricing: PricingService,
   ) {}
 
-  /** Unit price = Sku.wholesalePrice * tierDiscount */
-  getUnitPrice(wholesalePrice: Prisma.Decimal | null, tier: CustomerTier): number {
+  /** Unit price = Sku.wholesalePrice * tierDiscount；优先 DB policy，无则 fallback 硬编码 */
+  async getUnitPrice(
+    tenantId: string,
+    wholesalePrice: Prisma.Decimal | null,
+    tier: CustomerTier,
+  ): Promise<number> {
     const base = wholesalePrice ? Number(wholesalePrice) : 0;
-    return base * (TIER_DISCOUNT[tier] ?? 1);
+    const multiplier =
+      (await this.pricing.getTierDiscountMultiplier(tenantId, tier)) ??
+      TIER_DISCOUNT_FALLBACK[tier] ??
+      1;
+    return base * multiplier;
   }
 
   private async generateOrderNumber(tenantId: string): Promise<string> {
@@ -54,14 +73,20 @@ export class SalesOrdersService {
     tenantId: string,
     dto: CreateSalesOrderDto,
     source: OrderSource = OrderSource.MANUAL,
+    status: SOStatus = SOStatus.PENDING,
   ) {
     const [customer, warehouse] = await Promise.all([
-      this.prisma.customer.findFirst({ where: { id: dto.customerId, tenantId } }),
-      this.prisma.warehouse.findFirst({ where: { id: dto.warehouseId, tenantId } }),
+      this.prisma.customer.findFirst({
+        where: { id: dto.customerId, tenantId },
+      }),
+      this.prisma.warehouse.findFirst({
+        where: { id: dto.warehouseId, tenantId },
+      }),
     ]);
     if (!customer) throw new NotFoundException('Customer not found');
     if (!warehouse) throw new NotFoundException('Warehouse not found');
-    if (!customer.isActive) throw new BadRequestException('Customer is inactive');
+    if (!customer.isActive)
+      throw new BadRequestException('Customer is inactive');
 
     const orderNumber = await this.generateOrderNumber(tenantId);
     let totalAmount = 0;
@@ -75,7 +100,7 @@ export class SalesOrdersService {
           warehouseId: dto.warehouseId,
           currency: dto.currency ?? 'EUR',
           notes: dto.notes,
-          status: SOStatus.PENDING,
+          status,
           source,
         },
       });
@@ -86,7 +111,11 @@ export class SalesOrdersService {
           include: { product: true },
         });
         if (!sku) throw new NotFoundException(`SKU ${item.skuId} not found`);
-        const unitPrice = this.getUnitPrice(sku.wholesalePrice, customer.tier);
+        const unitPrice = await this.getUnitPrice(
+          tenantId,
+          sku.wholesalePrice,
+          customer.tier,
+        );
         const lineTotal = unitPrice * item.quantity;
         totalAmount += lineTotal;
         await tx.salesOrderItem.create({
@@ -109,7 +138,12 @@ export class SalesOrdersService {
 
   async findAll(
     tenantId: string,
-    query: { status?: SOStatus; customerId?: string; page?: number; limit?: number },
+    query: {
+      status?: SOStatus;
+      customerId?: string;
+      page?: number;
+      limit?: number;
+    },
   ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
@@ -160,17 +194,13 @@ export class SalesOrdersService {
     }
 
     for (const item of so.items) {
-      await this.inventory.lockInventory(
-        tenantId,
-        userId,
-        {
-          skuId: item.skuId,
-          warehouseId: so.warehouseId,
-          quantity: item.quantity,
-          referenceType: 'SO',
-          referenceId: so.id,
-        },
-      );
+      await this.inventory.lockInventory(tenantId, userId, {
+        skuId: item.skuId,
+        warehouseId: so.warehouseId,
+        quantity: item.quantity,
+        referenceType: 'SO',
+        referenceId: so.id,
+      });
     }
 
     return this.prisma.salesOrder.update({
@@ -190,17 +220,13 @@ export class SalesOrdersService {
 
     if (so.status === SOStatus.CONFIRMED) {
       for (const item of so.items) {
-        await this.inventory.unlockInventory(
-          tenantId,
-          userId,
-          {
-            skuId: item.skuId,
-            warehouseId: so.warehouseId,
-            quantity: item.quantity,
-            referenceType: 'SO',
-            referenceId: so.id,
-          },
-        );
+        await this.inventory.unlockInventory(tenantId, userId, {
+          skuId: item.skuId,
+          warehouseId: so.warehouseId,
+          quantity: item.quantity,
+          referenceType: 'SO',
+          referenceId: so.id,
+        });
       }
     }
 
@@ -219,7 +245,12 @@ export class SalesOrdersService {
       );
     }
 
-    const pickItems: { binCode: string; skuCode: string; skuName: string; quantity: number }[] = [];
+    const pickItems: {
+      binCode: string;
+      skuCode: string;
+      skuName: string;
+      quantity: number;
+    }[] = [];
 
     for (const item of so.items) {
       const invItems = await this.prisma.inventoryItem.findMany({
@@ -269,7 +300,11 @@ export class SalesOrdersService {
 
   async fulfill(id: string, tenantId: string, userId: string) {
     const so = await this.findOne(id, tenantId);
-    const allowedStatuses: SOStatus[] = [SOStatus.CONFIRMED, SOStatus.PICKING, SOStatus.PACKED];
+    const allowedStatuses: SOStatus[] = [
+      SOStatus.CONFIRMED,
+      SOStatus.PICKING,
+      SOStatus.PACKED,
+    ];
     if (!allowedStatuses.includes(so.status)) {
       throw new BadRequestException(
         `Cannot fulfill: order status is ${so.status}`,
@@ -287,7 +322,7 @@ export class SalesOrdersService {
       });
     }
 
-    return this.prisma.salesOrder.update({
+    const updated = await this.prisma.salesOrder.update({
       where: { id },
       data: {
         status: SOStatus.COMPLETED,
@@ -295,5 +330,36 @@ export class SalesOrdersService {
       },
       include: SO_INCLUDE,
     });
+
+    // 2026-03-17T12:00:00 - 出库通知：运营角色 + 对应客户
+    const payload = {
+      orderId: so.id,
+      orderNumber: so.orderNumber,
+      customerId: so.customerId,
+    };
+    const opsUsers = await this.prisma.user.findMany({
+      where: { tenantId, role: UserRole.OPERATIONS, isActive: true },
+      select: { id: true },
+    });
+    for (const u of opsUsers) {
+      await this.notificationsService.createEvent({
+        tenantId,
+        type: 'OUTBOUND_COMPLETED',
+        title: `订单 ${so.orderNumber} 已出库`,
+        body: `销售订单 ${so.orderNumber} 已完成出库`,
+        payload,
+        targetUserId: u.id,
+      });
+    }
+    await this.notificationsService.createEvent({
+      tenantId,
+      type: 'OUTBOUND_COMPLETED',
+      title: `您的订单 ${so.orderNumber} 已出库`,
+      body: `订单 ${so.orderNumber} 已完成出库`,
+      payload,
+      targetCustomerId: so.customerId,
+    });
+
+    return updated;
   }
 }

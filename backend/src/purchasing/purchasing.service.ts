@@ -1,11 +1,11 @@
-// Updated: 2026-03-14 - 阶段二收货 6 状态/6 Tab + 操作日志
+// Updated: 2026-03-17T12:00:00 - 后端第三部分：到柜预报 forecast/status/items-with-stock
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { POStatus, ReceiptStatus } from '@prisma/client';
+import { POStatus, ReceiptStatus, ShipmentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActionLogService } from '../action-log/action-log.service';
 import { InventoryService } from '../inventory/inventory.service';
@@ -64,7 +64,11 @@ export class PurchasingService {
 
   // ==================== Purchase Orders ====================
 
-  async createPO(tenantId: string, userId: string, dto: CreatePurchaseOrderDto) {
+  async createPO(
+    tenantId: string,
+    userId: string,
+    dto: CreatePurchaseOrderDto,
+  ) {
     const orderNumber = await this.generateOrderNumber(tenantId);
 
     const po = await this.prisma.$transaction(async (tx) => {
@@ -113,12 +117,7 @@ export class PurchasingService {
     return po;
   }
 
-  async findAllPOs(
-    tenantId: string,
-    status?: POStatus,
-    page = 1,
-    limit = 20,
-  ) {
+  async findAllPOs(tenantId: string, status?: POStatus, page = 1, limit = 20) {
     const skip = (page - 1) * limit;
     const where = { tenantId, ...(status && { status }) };
 
@@ -152,7 +151,12 @@ export class PurchasingService {
     return po;
   }
 
-  async updatePO(id: string, tenantId: string, userId: string, dto: UpdatePurchaseOrderDto) {
+  async updatePO(
+    id: string,
+    tenantId: string,
+    userId: string,
+    dto: UpdatePurchaseOrderDto,
+  ) {
     await this.findOnePO(id, tenantId);
 
     const data: Record<string, unknown> = { ...dto };
@@ -219,7 +223,10 @@ export class PurchasingService {
         eta: dto.eta ? new Date(dto.eta) : undefined,
         portOfLoading: dto.portOfLoading,
         portOfDischarge: dto.portOfDischarge,
-        shippingCost: dto.shippingCost != null ? new Prisma.Decimal(dto.shippingCost) : undefined,
+        shippingCost:
+          dto.shippingCost != null
+            ? new Prisma.Decimal(dto.shippingCost)
+            : undefined,
       },
       include: { purchaseOrder: true },
     });
@@ -236,7 +243,8 @@ export class PurchasingService {
     const data: Record<string, unknown> = { ...dto };
     if (dto.etd) data.etd = new Date(dto.etd);
     if (dto.eta) data.eta = new Date(dto.eta);
-    if (dto.shippingCost != null) data.shippingCost = new Prisma.Decimal(dto.shippingCost);
+    if (dto.shippingCost != null)
+      data.shippingCost = new Prisma.Decimal(dto.shippingCost);
 
     return this.prisma.shipment.update({
       where: { id },
@@ -252,6 +260,84 @@ export class PurchasingService {
       orderBy: { createdAt: 'desc' },
       include: { purchaseOrder: true, packingLists: true },
     });
+  }
+
+  /** 到柜预报：即将到港/到仓的 shipments（IN_TRANSIT、ARRIVED、ARRIVED_PORT、AT_WAREHOUSE_PENDING_UNLOAD、UNLOADING_COUNTING_RECEIVING） */
+  async getShipmentsForecast(tenantId: string) {
+    const forecastStatuses: ShipmentStatus[] = [
+      ShipmentStatus.IN_TRANSIT,
+      ShipmentStatus.ARRIVED,
+      ShipmentStatus.ARRIVED_PORT,
+      ShipmentStatus.AT_WAREHOUSE_PENDING_UNLOAD,
+      ShipmentStatus.UNLOADING_COUNTING_RECEIVING,
+    ];
+    return this.prisma.shipment.findMany({
+      where: { tenantId, status: { in: forecastStatuses } },
+      orderBy: [{ eta: 'asc' }, { createdAt: 'desc' }],
+      include: {
+        purchaseOrder: { include: { supplier: true } },
+        packingLists: true,
+      },
+    });
+  }
+
+  /** PATCH shipment status */
+  async patchShipmentStatus(
+    id: string,
+    tenantId: string,
+    status: ShipmentStatus,
+  ) {
+    const shipment = await this.prisma.shipment.findFirst({
+      where: { id, tenantId },
+    });
+    if (!shipment) {
+      throw new NotFoundException('Shipment not found');
+    }
+    return this.prisma.shipment.update({
+      where: { id },
+      data: { status },
+      include: { purchaseOrder: true, packingLists: true },
+    });
+  }
+
+  /** Packing list items 聚合当前库存可用量（按 skuCode 匹配 SKU） */
+  async getShipmentItemsWithStock(id: string, tenantId: string) {
+    const shipment = await this.prisma.shipment.findFirst({
+      where: { id, tenantId },
+      include: { packingLists: true, purchaseOrder: true },
+    });
+    if (!shipment) {
+      throw new NotFoundException('Shipment not found');
+    }
+    const skuCodes = [...new Set(shipment.packingLists.map((p) => p.skuCode))];
+    const skus = await this.prisma.sku.findMany({
+      where: { tenantId, code: { in: skuCodes } },
+      select: { id: true, code: true },
+    });
+    const skuCodeToId = new Map(skus.map((s) => [s.code, s.id]));
+    const skuIds = skus.map((s) => s.id);
+    const availabilityMap = await this.inventoryService.getBatchSkuAvailability(
+      tenantId,
+      skuIds,
+    );
+    const items = shipment.packingLists.map((p) => {
+      const skuId = skuCodeToId.get(p.skuCode);
+      const availableStock = skuId ? (availabilityMap.get(skuId) ?? 0) : 0;
+      return {
+        ...p,
+        skuId: skuId ?? null,
+        availableStock,
+      };
+    });
+    return {
+      shipment: {
+        id: shipment.id,
+        containerNo: shipment.containerNo,
+        eta: shipment.eta,
+        status: shipment.status,
+      },
+      items,
+    };
   }
 
   // ==================== Packing Lists ====================
@@ -275,8 +361,14 @@ export class PurchasingService {
         skuCode: item.skuCode,
         skuName: item.skuName,
         quantity: item.quantity,
-        grossWeight: item.grossWeight != null ? new Prisma.Decimal(item.grossWeight) : undefined,
-        netWeight: item.netWeight != null ? new Prisma.Decimal(item.netWeight) : undefined,
+        grossWeight:
+          item.grossWeight != null
+            ? new Prisma.Decimal(item.grossWeight)
+            : undefined,
+        netWeight:
+          item.netWeight != null
+            ? new Prisma.Decimal(item.netWeight)
+            : undefined,
         cbm: item.cbm != null ? new Prisma.Decimal(item.cbm) : undefined,
       })),
     });
@@ -359,7 +451,10 @@ export class PurchasingService {
         action: 'create',
         entityType: 'PurchaseReceipt',
         entityId: receipt.id,
-        payload: { receiptNumber: receipt.receiptNumber, purchaseOrderId: dto.purchaseOrderId },
+        payload: {
+          receiptNumber: receipt.receiptNumber,
+          purchaseOrderId: dto.purchaseOrderId,
+        },
       });
     }
     return receipt;
@@ -402,7 +497,11 @@ export class PurchasingService {
         orderBy: { createdAt: 'desc' },
         include: {
           purchaseOrder: { include: { supplier: true } },
-          items: { include: { poItem: { include: { sku: { include: { product: true } } } } } },
+          items: {
+            include: {
+              poItem: { include: { sku: { include: { product: true } } } },
+            },
+          },
         },
       }),
       this.prisma.purchaseReceipt.count({ where }),
@@ -445,7 +544,11 @@ export class PurchasingService {
   /** 分拣完成：UNLOADED -> SORTED */
   async sortingComplete(tenantId: string, receiptIds: string[]) {
     const receipts = await this.prisma.purchaseReceipt.findMany({
-      where: { id: { in: receiptIds }, tenantId, status: ReceiptStatus.UNLOADED },
+      where: {
+        id: { in: receiptIds },
+        tenantId,
+        status: ReceiptStatus.UNLOADED,
+      },
     });
     if (receipts.length !== receiptIds.length) {
       throw new BadRequestException('部分收货单状态不允许分拣完成或不存在');

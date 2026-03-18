@@ -8,19 +8,13 @@ import {
   Body,
   Post,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
+import { SkusService } from '../skus/skus.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { SalesOrdersService } from '../sales-orders/sales-orders.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import {
-  AddCartItemDto,
-  WholesaleCartItemDto,
-} from './dto/wholesale-cart.dto';
+import { AddCartItemDto, WholesaleCartItemDto } from './dto/wholesale-cart.dto';
 
 const LOW_STOCK_THRESHOLD = 10;
 
@@ -36,14 +30,14 @@ function mapAvailableToStatus(available: number) {
 export class WholesaleCartController {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly skusService: SkusService,
     private readonly inventoryService: InventoryService,
     private readonly salesOrdersService: SalesOrdersService,
   ) {}
 
   @Get()
   @ApiOperation({
-    summary:
-      '获取当前客户的购物车（含价格、起订量、库存状态）',
+    summary: '获取当前客户的购物车（含价格、起订量、库存状态）',
   })
   async getCart(
     @CurrentUser('tenantId') tenantId: string,
@@ -75,20 +69,22 @@ export class WholesaleCartController {
         tenantId,
         sku.id,
       );
-      const unitPrice = this.salesOrdersService.getUnitPrice(
+      const unitPrice = await this.salesOrdersService.getUnitPrice(
+        tenantId,
         sku.wholesalePrice,
         customer.tier,
       );
-      const minOrderQty = (sku as any).minOrderQty ?? 1;
+      const minOrderQty = this.skusService.getResolvedMoq(sku);
       const attrs = sku.variantAttributes as Record<string, string> | null;
-      const variantLabel = attrs
-        ? Object.values(attrs).join(' / ')
-        : '';
+      const variantLabel = attrs ? Object.values(attrs).join(' / ') : '';
 
       result.push({
         skuId: sku.id,
         skuCode: sku.code,
-        productName: (sku as any).product?.nameEn || (sku as any).product?.name || sku.code,
+        productName:
+          (sku as any).product?.nameEn ||
+          (sku as any).product?.name ||
+          sku.code,
         variantLabel,
         quantity: item.quantity,
         wholesalePrice: unitPrice,
@@ -102,8 +98,7 @@ export class WholesaleCartController {
 
   @Post('items')
   @ApiOperation({
-    summary:
-      '新增或更新购物车行（同一 SKU 覆盖为目标数量；数量<=0 表示移除）',
+    summary: '新增或更新购物车行（同一 SKU 覆盖为目标数量；数量<=0 表示移除）',
   })
   async upsertCartItem(
     @CurrentUser('tenantId') tenantId: string,
@@ -124,7 +119,7 @@ export class WholesaleCartController {
       return this.getCart(tenantId, customerId);
     }
 
-    const minOrderQty = (sku as any).minOrderQty ?? 1;
+    const minOrderQty = this.skusService.getResolvedMoq(sku);
     if (dto.quantity < minOrderQty && dto.quantity % minOrderQty !== 0) {
       throw new BadRequestException(
         `Quantity must be >= minOrderQty (${minOrderQty}) or a multiple of it`,
@@ -169,4 +164,3 @@ export class WholesaleCartController {
     return this.getCart(tenantId, customerId);
   }
 }
-

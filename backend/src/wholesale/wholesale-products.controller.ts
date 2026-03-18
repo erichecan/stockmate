@@ -1,8 +1,14 @@
 // Updated: 2026-03-14T16:10:00 - 批发站 P0: 登录后商品列表/详情（含价格/起订量/库存状态）
 import { Controller, Get, Param, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ProductsService } from '../products/products.service';
 import { SalesOrdersService } from '../sales-orders/sales-orders.service';
+import { SkusService } from '../skus/skus.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -31,13 +37,16 @@ export class WholesaleProductsController {
     private readonly prisma: PrismaService,
     private readonly productsService: ProductsService,
     private readonly salesOrdersService: SalesOrdersService,
+    private readonly skusService: SkusService,
     private readonly inventoryService: InventoryService,
   ) {}
 
-  // Updated: 2026-03-17T00:21:00 - P0 闭环: 公共端点也加分页
+  // 2026-03-17T10:07:00 - 公共端点分页 + 返回 total
   @Get('public/products')
   @Public()
-  @ApiOperation({ summary: 'Public product list for wholesale site (no price/stock)' })
+  @ApiOperation({
+    summary: 'Public product list for wholesale site (no price/stock)',
+  })
   @ApiQuery({ name: 'tenantSlug', required: true })
   @ApiQuery({ name: 'categoryId', required: false })
   @ApiQuery({ name: 'q', required: false, description: 'Search keyword' })
@@ -49,16 +58,15 @@ export class WholesaleProductsController {
     @Query('q') q?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-  ): Promise<PublicProductListItemDto[]> {
-    // 2026-03-15 修复：缺失 tenantSlug 时直接返回空数组，避免 trim 报错导致加载失败
+  ) {
     if (!tenantSlug?.trim()) {
-      return [];
+      return { data: [], total: 0, page: 1, limit: 50 };
     }
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug.trim() },
     });
     if (!tenant) {
-      return [];
+      return { data: [], total: 0, page: 1, limit: 50 };
     }
 
     const where: any = {
@@ -77,15 +85,18 @@ export class WholesaleProductsController {
 
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 50;
-    const products = await this.prisma.product.findMany({
-      where,
-      include: { category: true, brand: true },
-      orderBy: { createdAt: 'desc' },
-      skip: (pageNum - 1) * limitNum,
-      take: limitNum,
-    });
+    const [products, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: { category: true, brand: true },
+        orderBy: { createdAt: 'desc' },
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
 
-    return products.map((p) => ({
+    const data: PublicProductListItemDto[] = products.map((p) => ({
       id: p.id,
       name: p.name,
       nameEn: p.nameEn,
@@ -93,11 +104,15 @@ export class WholesaleProductsController {
       categoryName: p.category?.name ?? null,
       brandName: p.brand?.name ?? null,
     }));
+
+    return { data, total, page: pageNum, limit: limitNum };
   }
 
   @Get('public/products/:id')
   @Public()
-  @ApiOperation({ summary: 'Public product detail for wholesale site (no price/stock)' })
+  @ApiOperation({
+    summary: 'Public product detail for wholesale site (no price/stock)',
+  })
   @ApiQuery({ name: 'tenantSlug', required: true })
   async getPublicProductDetail(
     @Param('id') id: string,
@@ -128,10 +143,11 @@ export class WholesaleProductsController {
     };
   }
 
-  // Updated: 2026-03-17T00:20:00 - P0 闭环: 添加分页避免 N+1 查询超时
+  // 2026-03-17T10:06:00 - 批量库存查询替代 N+1，支持分页 + 返回 total
   @Get('products')
   @ApiOperation({
-    summary: 'Wholesale product list for logged-in customer (with price/stock/minOrderQty)',
+    summary:
+      'Wholesale product list for logged-in customer (with price/stock/minOrderQty)',
   })
   @ApiQuery({ name: 'categoryId', required: false })
   @ApiQuery({ name: 'q', required: false })
@@ -144,12 +160,12 @@ export class WholesaleProductsController {
     @Query('q') q?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-  ): Promise<WholesaleProductListItemDto[]> {
+  ) {
     const customer = await this.prisma.customer.findFirst({
       where: { id: customerId, tenantId },
     });
     if (!customer) {
-      return [];
+      return { data: [], total: 0, page: 1, limit: 50 };
     }
 
     const pageNum = page ? parseInt(page, 10) : 1;
@@ -170,61 +186,60 @@ export class WholesaleProductsController {
       ];
     }
 
-    const products = await this.prisma.product.findMany({
-      where,
-      include: {
-        category: true,
-        brand: true,
-        skus: { where: { isActive: true }, orderBy: { code: 'asc' } },
-      },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limitNum,
-    });
+    const [products, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: {
+          category: true,
+          brand: true,
+          skus: { where: { isActive: true }, orderBy: { code: 'asc' } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limitNum,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
 
-    const result: WholesaleProductListItemDto[] = [];
+    const allSkuIds = products.flatMap((p) => p.skus.map((s) => s.id));
+    const availabilityMap = await this.inventoryService.getBatchSkuAvailability(
+      tenantId,
+      allSkuIds,
+    );
 
-    for (const p of products) {
-      const skus: WholesaleSkuDto[] = [];
-      for (const sku of p.skus) {
-        const summary = await this.inventoryService.getSkuInventorySummary(
-          tenantId,
-          sku.id,
-        );
-        const unitPrice = this.salesOrdersService.getUnitPrice(
-          sku.wholesalePrice,
-          customer.tier,
-        );
-        const minOrderQty = sku.minOrderQty ?? 1;
-        skus.push({
-          id: sku.id,
-          code: sku.code,
-          variantAttributes: sku.variantAttributes as Record<string, string>,
-          wholesalePrice: unitPrice,
-          minOrderQty,
-          stockStatus: mapAvailableToStatus(summary.available),
-        });
-      }
-
-      result.push({
+    const data: WholesaleProductListItemDto[] = await Promise.all(
+      products.map(async (p) => ({
         id: p.id,
         name: p.name,
         nameEn: p.nameEn,
-        images: Array.isArray(p.images)
-          ? (p.images as string[])
-          : undefined,
+        images: Array.isArray(p.images) ? (p.images as string[]) : undefined,
         categoryName: p.category?.name ?? null,
         brandName: p.brand?.name ?? null,
-        skus,
-      });
-    }
+        // Updated: 2026-03-17T14:33:00 - getUnitPrice async + moq ?? minOrderQty
+        skus: await Promise.all(
+          p.skus.map(async (sku) => ({
+            id: sku.id,
+            code: sku.code,
+            variantAttributes: sku.variantAttributes as Record<string, string>,
+            wholesalePrice: await this.salesOrdersService.getUnitPrice(
+              tenantId,
+              sku.wholesalePrice,
+              customer.tier,
+            ),
+            minOrderQty: this.skusService.getResolvedMoq(sku),
+            stockStatus: mapAvailableToStatus(availabilityMap.get(sku.id) ?? 0),
+          })),
+        ),
+      })),
+    );
 
-    return result;
+    return { data, total, page: pageNum, limit: limitNum };
   }
 
   @Get('products/:id')
   @ApiOperation({
-    summary: 'Wholesale product detail for logged-in customer (with price/stock/minOrderQty)',
+    summary:
+      'Wholesale product detail for logged-in customer (with price/stock/minOrderQty)',
   })
   async getWholesaleProductDetail(
     @Param('id') id: string,
@@ -245,11 +260,12 @@ export class WholesaleProductsController {
         tenantId,
         sku.id,
       );
-      const unitPrice = this.salesOrdersService.getUnitPrice(
+      const unitPrice = await this.salesOrdersService.getUnitPrice(
+        tenantId,
         sku.wholesalePrice,
         customer.tier,
       );
-      const minOrderQty = (sku as any).minOrderQty ?? 1;
+      const minOrderQty = this.skusService.getResolvedMoq(sku);
       skus.push({
         id: sku.id,
         code: sku.code,
@@ -275,4 +291,3 @@ export class WholesaleProductsController {
     };
   }
 }
-

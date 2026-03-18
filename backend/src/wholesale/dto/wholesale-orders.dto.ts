@@ -1,6 +1,15 @@
-// Updated: 2026-03-16T23:55:00 - P0 闭环: 添加 class-validator 装饰器
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID } from 'class-validator';
+// Updated: 2026-03-17T14:30:00 - 批发 DRAFT：MergeDraftDto, PatchDraftItemsDto
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateWholesaleOrderFromCartDto {
   @ApiPropertyOptional({
@@ -17,3 +26,28 @@ export class CreateWholesaleOrderFromCartDto {
   notes?: string;
 }
 
+export class MergeDraftDto {
+  @ApiProperty({ type: [String], description: '要合并的订单 ID 列表' })
+  @IsArray()
+  @IsUUID('4', { each: true })
+  orderIds!: string[];
+}
+
+export class PatchDraftItemDto {
+  @ApiProperty({ description: 'SKU ID' })
+  @IsUUID()
+  skuId!: string;
+
+  @ApiProperty({ example: 1, minimum: 1 })
+  @IsInt()
+  @Min(1)
+  quantity!: number;
+}
+
+export class PatchDraftItemsDto {
+  @ApiProperty({ type: [PatchDraftItemDto], description: '全量订单行（覆盖）' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PatchDraftItemDto)
+  items!: PatchDraftItemDto[];
+}

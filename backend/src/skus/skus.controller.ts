@@ -1,4 +1,5 @@
 // Updated: 2026-02-27T04:30:00
+// Updated: 2026-03-17T14:31:00 - SKU MOQ PATCH endpoints
 import {
   Body,
   Controller,
@@ -18,6 +19,8 @@ import {
 import { SkusService } from './skus.service';
 import { CreateSkuDto } from './dto/create-sku.dto';
 import { UpdateSkuDto } from './dto/update-sku.dto';
+import { UpdateSkuMoqDto } from './dto/update-sku-moq.dto';
+import { BatchUpdateSkuMoqDto } from './dto/batch-update-sku-moq.dto';
 import { BulkCreateSkuDto } from './dto/bulk-create-sku.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -59,6 +62,16 @@ export class SkusController {
     return this.skusService.findAll(tenantId, pagination, search);
   }
 
+  @Patch('moq/batch')
+  @ApiOperation({ summary: 'Batch update SKU MOQ' })
+  @ApiResponse({ status: 200, description: 'SKUs updated' })
+  async batchUpdateMoq(
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: BatchUpdateSkuMoqDto,
+  ) {
+    return this.skusService.batchUpdateMoq(tenantId, dto);
+  }
+
   @Get('product/:productId')
   @ApiOperation({ summary: 'List SKUs by product' })
   @ApiResponse({ status: 200, description: 'SKUs for product returned' })
@@ -89,6 +102,17 @@ export class SkusController {
     @Body() dto: UpdateSkuDto,
   ) {
     return this.skusService.update(id, tenantId, dto);
+  }
+
+  @Patch(':id/moq')
+  @ApiOperation({ summary: 'Update SKU MOQ' })
+  @ApiResponse({ status: 200, description: 'SKU MOQ updated' })
+  async updateMoq(
+    @Param('id') id: string,
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: UpdateSkuMoqDto,
+  ) {
+    return this.skusService.updateMoq(id, tenantId, dto.moq);
   }
 
   @Delete(':id')

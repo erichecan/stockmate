@@ -1,15 +1,32 @@
 // Updated: 2026-02-27T04:30:00
+// Updated: 2026-03-17T14:31:00 - SKU MOQ API + getResolvedMoq
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkuDto } from './dto/create-sku.dto';
 import { UpdateSkuDto } from './dto/update-sku.dto';
 import { BulkCreateSkuDto } from './dto/bulk-create-sku.dto';
-import { PaginationDto, PaginatedResponseDto } from '../common/dto/pagination.dto';
+import { BatchUpdateSkuMoqDto } from './dto/batch-update-sku-moq.dto';
+import {
+  PaginationDto,
+  PaginatedResponseDto,
+} from '../common/dto/pagination.dto';
+
+/** Sku 或含 moq/minOrderQty 的对象 */
+type SkuLike = { moq?: number | null; minOrderQty?: number | null };
 
 @Injectable()
 export class SkusService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * 优先读 moq，fallback 到 minOrderQty，默认 1
+   * Updated: 2026-03-17T14:31:00
+   */
+  getResolvedMoq(sku: SkuLike): number {
+    const v = sku.moq ?? sku.minOrderQty;
+    return v != null && v >= 1 ? v : 1;
+  }
 
   async create(tenantId: string, dto: CreateSkuDto) {
     const code = await this.generateSkuCode(
@@ -132,6 +149,38 @@ export class SkusService {
     return this.prisma.sku.update({
       where: { id },
       data: { isActive: false },
+    });
+  }
+
+  /** Updated: 2026-03-17T14:31:00 - PATCH /skus/:id/moq */
+  async updateMoq(id: string, tenantId: string, moq: number) {
+    await this.findOne(id, tenantId);
+    return this.prisma.sku.update({
+      where: { id },
+      data: { moq },
+      include: { product: true },
+    });
+  }
+
+  /** Updated: 2026-03-17T14:31:00 - PATCH /skus/moq/batch，事务执行 */
+  async batchUpdateMoq(tenantId: string, dto: BatchUpdateSkuMoqDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const results = [];
+      for (const item of dto.items) {
+        const sku = await tx.sku.findFirst({
+          where: { id: item.skuId, tenantId },
+        });
+        if (!sku) {
+          throw new NotFoundException(`SKU ${item.skuId} not found`);
+        }
+        const updated = await tx.sku.update({
+          where: { id: item.skuId },
+          data: { moq: item.moq },
+          include: { product: true },
+        });
+        results.push(updated);
+      }
+      return results;
     });
   }
 
