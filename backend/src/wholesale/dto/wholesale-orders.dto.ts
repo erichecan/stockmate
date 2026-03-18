@@ -31,6 +31,17 @@ export class MergeDraftDto {
   @IsArray()
   @IsUUID('4', { each: true })
   orderIds!: string[];
+
+  // Updated: 2026-03-19T00:15:20 - 兼容旧前端请求体中的 items 字段，避免 whitelist 400
+  @ApiPropertyOptional({
+    type: [Object],
+    description: '兼容字段：旧前端可能会传，当前 merge-draft 逻辑不使用',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PatchDraftItemDto)
+  items?: PatchDraftItemDto[];
 }
 
 export class PatchDraftItemDto {

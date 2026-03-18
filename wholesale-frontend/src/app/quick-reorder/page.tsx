@@ -196,9 +196,14 @@ function QuickReorderContent() {
     setSubmitting(true);
     try {
       const orderIds = Array.from(selectedOrderIds);
+      // Updated: 2026-03-19T00:16:05 - 前端兜底校验，避免空 orderIds 请求导致 400
+      if (!orderIds.length) {
+        toast.error('Please select at least one previous order');
+        return;
+      }
+      // Updated: 2026-03-19T00:15:20 - merge-draft 只需 orderIds，避免触发后端 whitelist 400
       const { data } = await api.post('/reorder/merge-draft', {
-        orderIds: orderIds.length ? orderIds : undefined,
-        items: selectedItems.map((i) => ({ skuId: i.skuId, quantity: i.newQty })),
+        orderIds,
       });
       const draftId = data?.id ?? data?.draftId ?? data?.orderId;
       if (draftId) {
