@@ -132,9 +132,14 @@ export class SalesOrdersService {
       });
     }
 
-    return this.prisma.salesOrder.update({
+    await this.prisma.salesOrder.update({
       where: { id: so.id },
       data: { totalAmount: new Prisma.Decimal(totalAmount) },
+    });
+
+    // Updated: 2026-03-19T00:49:10 - 避免写操作 + include 触发内部事务，拆成独立读查询
+    return this.prisma.salesOrder.findFirstOrThrow({
+      where: { id: so.id, tenantId },
       include: SO_INCLUDE,
     });
   }
