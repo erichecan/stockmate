@@ -40,7 +40,11 @@ export class SuppliersController {
 
   @Get()
   @ApiOperation({ summary: 'List suppliers with pagination and search' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by name or code' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Search by name or code',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Suppliers list returned' })

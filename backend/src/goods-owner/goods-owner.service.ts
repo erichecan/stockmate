@@ -36,12 +36,7 @@ export class GoodsOwnerService {
     });
   }
 
-  async findAll(
-    tenantId: string,
-    search?: string,
-    page = 1,
-    limit = 20,
-  ) {
+  async findAll(tenantId: string, search?: string, page = 1, limit = 20) {
     const skip = (page - 1) * limit;
     const where: Prisma.GoodsOwnerWhereInput = { tenantId };
     if (search?.trim()) {
@@ -84,7 +79,8 @@ export class GoodsOwnerService {
       const existing = await this.prisma.goodsOwner.findFirst({
         where: { tenantId, code: dto.code, id: { not: id } },
       });
-      if (existing) throw new ConflictException(`货主编码 "${dto.code}" 已存在`);
+      if (existing)
+        throw new ConflictException(`货主编码 "${dto.code}" 已存在`);
     }
     return this.prisma.goodsOwner.update({
       where: { id },

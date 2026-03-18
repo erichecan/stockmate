@@ -1,10 +1,5 @@
 // Updated: 2026-02-28T10:00:00
-import {
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-} from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateBinLocationDto {
@@ -13,7 +8,11 @@ export class CreateBinLocationDto {
   @IsNotEmpty()
   code!: string;
 
-  @ApiPropertyOptional({ example: 'uuid-of-warehouse', description: 'Warehouse ID (injected from URL when using POST /:warehouseId/bins)' })
+  @ApiPropertyOptional({
+    example: 'uuid-of-warehouse',
+    description:
+      'Warehouse ID (injected from URL when using POST /:warehouseId/bins)',
+  })
   @IsUUID()
   @IsOptional()
   warehouseId?: string;

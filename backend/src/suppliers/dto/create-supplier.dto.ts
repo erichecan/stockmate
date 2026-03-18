@@ -50,7 +50,11 @@ export class CreateSupplierDto {
   @IsOptional()
   paymentTerms?: string;
 
-  @ApiPropertyOptional({ example: 7, minimum: 0, description: 'Lead time in days' })
+  @ApiPropertyOptional({
+    example: 7,
+    minimum: 0,
+    description: 'Lead time in days',
+  })
   @IsInt()
   @Min(0)
   @IsOptional()

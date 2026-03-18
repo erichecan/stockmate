@@ -3,4 +3,6 @@
 import { PartialType } from '@nestjs/swagger';
 import { CreatePrintSolutionDto } from './create-print-solution.dto';
 
-export class UpdatePrintSolutionDto extends PartialType(CreatePrintSolutionDto) {}
+export class UpdatePrintSolutionDto extends PartialType(
+  CreatePrintSolutionDto,
+) {}

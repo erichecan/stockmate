@@ -41,4 +41,3 @@ export class AddCartItemDto {
   @IsInt()
   quantity!: number;
 }
-

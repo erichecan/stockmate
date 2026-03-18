@@ -7,7 +7,10 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 import { StockFreezeStatus } from '@prisma/client';
 
 export class StockFreezeQueryDto extends PaginationDto {
-  @ApiPropertyOptional({ description: 'Freeze status', enum: StockFreezeStatus })
+  @ApiPropertyOptional({
+    description: 'Freeze status',
+    enum: StockFreezeStatus,
+  })
   @IsOptional()
   @IsEnum(StockFreezeStatus)
   status?: StockFreezeStatus;

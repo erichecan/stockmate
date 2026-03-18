@@ -1,10 +1,5 @@
 // Updated: 2026-02-28T10:00:00
-import {
-  IsBoolean,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateWarehouseDto {
@@ -33,7 +28,10 @@ export class CreateWarehouseDto {
   @IsOptional()
   country?: string;
 
-  @ApiPropertyOptional({ example: false, description: 'Set as default warehouse' })
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Set as default warehouse',
+  })
   @IsBoolean()
   @IsOptional()
   isDefault?: boolean;

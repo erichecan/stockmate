@@ -3,7 +3,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { PaginationDto, PaginatedResponseDto } from '../common/dto/pagination.dto';
+import {
+  PaginationDto,
+  PaginatedResponseDto,
+} from '../common/dto/pagination.dto';
 
 @Injectable()
 export class ProductsService {
@@ -35,7 +38,11 @@ export class ProductsService {
         where: { tenantId },
         skip,
         take: limit,
-        include: { category: true, brand: true, _count: { select: { skus: true } } },
+        include: {
+          category: true,
+          brand: true,
+          _count: { select: { skus: true } },
+        },
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.product.count({ where: { tenantId } }),

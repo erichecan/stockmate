@@ -1,7 +1,12 @@
 // ActionLogController - 操作日志分页查询接口，阶段一底座整合
 // Updated: 2026-03-14
 import { Controller, Get, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ActionLogService } from './action-log.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 

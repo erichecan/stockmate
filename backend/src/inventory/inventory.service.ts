@@ -55,7 +55,11 @@ export class InventoryService {
         skip,
         take: limit,
         include: INVENTORY_INCLUDE,
-        orderBy: [{ warehouseId: 'asc' }, { binLocationId: 'asc' }, { skuId: 'asc' }],
+        orderBy: [
+          { warehouseId: 'asc' },
+          { binLocationId: 'asc' },
+          { skuId: 'asc' },
+        ],
       }),
       this.prisma.inventoryItem.count({ where }),
     ]);
@@ -85,7 +89,11 @@ export class InventoryService {
         skip,
         take: limit,
         include: INVENTORY_INCLUDE,
-        orderBy: [{ warehouseId: 'asc' }, { binLocationId: 'asc' }, { skuId: 'asc' }],
+        orderBy: [
+          { warehouseId: 'asc' },
+          { binLocationId: 'asc' },
+          { skuId: 'asc' },
+        ],
       }),
       this.prisma.inventoryItem.count({ where }),
     ]);
@@ -110,6 +118,28 @@ export class InventoryService {
       totalLocked,
       available,
     };
+  }
+
+  // 2026-03-17T10:05:00 - 批量查询 SKU 可用库存，消除 N+1 查询
+  async getBatchSkuAvailability(
+    tenantId: string,
+    skuIds: string[],
+  ): Promise<Map<string, number>> {
+    if (skuIds.length === 0) return new Map();
+
+    const rows = await this.prisma.inventoryItem.groupBy({
+      by: ['skuId'],
+      where: { tenantId, skuId: { in: skuIds } },
+      _sum: { quantity: true, lockedQty: true },
+    });
+
+    const result = new Map<string, number>();
+    for (const row of rows) {
+      const total = row._sum.quantity ?? 0;
+      const locked = row._sum.lockedQty ?? 0;
+      result.set(row.skuId, total - locked);
+    }
+    return result;
   }
 
   // Updated: 2026-02-28T10:30:00 - fixed: return summary after transaction commits
@@ -165,7 +195,11 @@ export class InventoryService {
       action: 'inbound',
       entityType: 'InventoryItem',
       entityId: dto.skuId,
-      payload: { skuId: dto.skuId, warehouseId: dto.warehouseId, quantity: dto.quantity },
+      payload: {
+        skuId: dto.skuId,
+        warehouseId: dto.warehouseId,
+        quantity: dto.quantity,
+      },
     });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }
@@ -220,7 +254,11 @@ export class InventoryService {
       action: 'outbound',
       entityType: 'InventoryItem',
       entityId: dto.skuId,
-      payload: { skuId: dto.skuId, warehouseId: dto.warehouseId, quantity: dto.quantity },
+      payload: {
+        skuId: dto.skuId,
+        warehouseId: dto.warehouseId,
+        quantity: dto.quantity,
+      },
     });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }
@@ -277,7 +315,11 @@ export class InventoryService {
       action: 'adjust',
       entityType: 'InventoryItem',
       entityId: dto.skuId,
-      payload: { skuId: dto.skuId, warehouseId: dto.warehouseId, quantity: dto.quantity },
+      payload: {
+        skuId: dto.skuId,
+        warehouseId: dto.warehouseId,
+        quantity: dto.quantity,
+      },
     });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }
@@ -439,13 +481,21 @@ export class InventoryService {
       action: 'lock',
       entityType: 'InventoryItem',
       entityId: dto.skuId,
-      payload: { skuId: dto.skuId, warehouseId: dto.warehouseId, quantity: dto.quantity },
+      payload: {
+        skuId: dto.skuId,
+        warehouseId: dto.warehouseId,
+        quantity: dto.quantity,
+      },
     });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }
 
   // Updated: 2026-02-28T10:30:00
-  async unlockInventory(tenantId: string, userId: string, dto: UnlockInventoryDto) {
+  async unlockInventory(
+    tenantId: string,
+    userId: string,
+    dto: UnlockInventoryDto,
+  ) {
     await this.prisma.$transaction(async (tx) => {
       const items = await tx.inventoryItem.findMany({
         where: {
@@ -495,7 +545,11 @@ export class InventoryService {
       action: 'unlock',
       entityType: 'InventoryItem',
       entityId: dto.skuId,
-      payload: { skuId: dto.skuId, warehouseId: dto.warehouseId, quantity: dto.quantity },
+      payload: {
+        skuId: dto.skuId,
+        warehouseId: dto.warehouseId,
+        quantity: dto.quantity,
+      },
     });
     return this.getSkuInventorySummary(tenantId, dto.skuId);
   }

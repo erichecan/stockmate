@@ -1,4 +1,4 @@
-// 2026-03-17T12:36:00 - Admin layout: sidebar nav, consistent style
+// Updated: 2026-03-18T22:56:10 - Admin 导航补齐配置与作业功能入口
 'use client';
 
 import Link from 'next/link';
@@ -11,10 +11,16 @@ import {
   Banknote,
   LayoutDashboard,
   Package,
+  Tags,
+  ListChecks,
+  ShieldAlert,
 } from 'lucide-react';
 
 const ADMIN_NAV = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/pricing', label: 'Tier Discount', icon: Tags },
+  { href: '/admin/moq', label: 'MOQ Batch', icon: ListChecks },
+  { href: '/admin/preorder-limits', label: 'Preorder Limit', icon: ShieldAlert },
   { href: '/admin/orders', label: 'Orders', icon: ClipboardList },
   { href: '/admin/waves', label: 'Waves', icon: Layers },
   { href: '/admin/shipments', label: 'Shipments', icon: Truck },

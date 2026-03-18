@@ -63,4 +63,3 @@ export class WholesaleProductDetailDto extends WholesaleProductListItemDto {
   @ApiProperty({ required: false })
   descriptionEn?: string | null;
 }
-

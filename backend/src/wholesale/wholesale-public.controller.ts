@@ -29,4 +29,3 @@ export class WholesalePublicController {
     return this.categoriesService.findTree(tenant.id);
   }
 }
-

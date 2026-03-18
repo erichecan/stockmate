@@ -19,7 +19,9 @@ export class WarehousesService {
       where: { code_tenantId: { code: dto.code, tenantId } },
     });
     if (existing) {
-      throw new ConflictException(`Warehouse code "${dto.code}" already exists`);
+      throw new ConflictException(
+        `Warehouse code "${dto.code}" already exists`,
+      );
     }
 
     return this.prisma.warehouse.create({
@@ -60,7 +62,9 @@ export class WarehousesService {
         where: { code: dto.code, tenantId, id: { not: id } },
       });
       if (existing) {
-        throw new ConflictException(`Warehouse code "${dto.code}" already exists`);
+        throw new ConflictException(
+          `Warehouse code "${dto.code}" already exists`,
+        );
       }
     }
 
@@ -78,7 +82,11 @@ export class WarehousesService {
     });
   }
 
-  async createBin(tenantId: string, warehouseId: string, dto: CreateBinLocationDto) {
+  async createBin(
+    tenantId: string,
+    warehouseId: string,
+    dto: CreateBinLocationDto,
+  ) {
     await this.findOne(warehouseId, tenantId);
 
     const existing = await this.prisma.binLocation.findUnique({

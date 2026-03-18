@@ -52,7 +52,16 @@ export class AuthService {
 
   /** 验证用户：tenantSlug 可选；不填时按邮箱查找，仅当唯一匹配时通过 */
   async validateUser(email: string, password: string, tenantSlug?: string) {
-    let user: { id: string; email: string; tenantId: string; passwordHash: string; isActive: boolean; firstName: string | null; lastName: string | null; role: UserRole } | null = null;
+    let user: {
+      id: string;
+      email: string;
+      tenantId: string;
+      passwordHash: string;
+      isActive: boolean;
+      firstName: string | null;
+      lastName: string | null;
+      role: UserRole;
+    } | null = null;
 
     if (tenantSlug?.trim()) {
       const tenant = await this.prisma.tenant.findUnique({
@@ -74,7 +83,10 @@ export class AuthService {
         throw new UnauthorizedException('Invalid credentials');
       }
       if (activeUsers.length > 1) {
-        const tenants = activeUsers.map((u) => ({ slug: u.tenant!.slug, name: u.tenant!.name }));
+        const tenants = activeUsers.map((u) => ({
+          slug: u.tenant.slug,
+          name: u.tenant.name,
+        }));
         throw new UnauthorizedException(
           JSON.stringify({ code: 'MULTIPLE_TENANTS', tenants }),
         );
@@ -131,11 +143,11 @@ export class AuthService {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload as unknown as Record<string, unknown>, {
         secret: this.configService.get<string>('jwt.accessSecret'),
-        expiresIn: this.configService.get('jwt.accessExpiration', '15m') as `${number}${'s' | 'm' | 'h' | 'd'}`,
+        expiresIn: this.configService.get('jwt.accessExpiration', '15m'),
       }),
       this.jwtService.signAsync(payload as unknown as Record<string, unknown>, {
         secret: this.configService.get<string>('jwt.refreshSecret'),
-        expiresIn: this.configService.get('jwt.refreshExpiration', '7d') as `${number}${'s' | 'm' | 'h' | 'd'}`,
+        expiresIn: this.configService.get('jwt.refreshExpiration', '7d'),
       }),
     ]);
 

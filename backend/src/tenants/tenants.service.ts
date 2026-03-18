@@ -8,7 +8,10 @@ import { TenantStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
-import { PaginationDto, PaginatedResponseDto } from '../common/dto/pagination.dto';
+import {
+  PaginationDto,
+  PaginatedResponseDto,
+} from '../common/dto/pagination.dto';
 
 @Injectable()
 export class TenantsService {
@@ -58,7 +61,11 @@ export class TenantsService {
   async findOne(id: string) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id },
-      include: { users: { select: { id: true, email: true, role: true, isActive: true } } },
+      include: {
+        users: {
+          select: { id: true, email: true, role: true, isActive: true },
+        },
+      },
     });
     if (!tenant) {
       throw new NotFoundException('Tenant not found');

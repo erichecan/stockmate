@@ -1,6 +1,12 @@
 // Updated: 2026-02-28T10:00:00
 import { Controller, Get, Header, Query, StreamableFile } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { BarcodeService } from './barcode.service';
 
 @ApiTags('Barcode')
@@ -13,7 +19,11 @@ export class BarcodeController {
   @Header('Content-Type', 'image/png')
   @ApiOperation({ summary: 'Generate Code 128 barcode as PNG' })
   @ApiQuery({ name: 'text', required: true, description: 'Text to encode' })
-  @ApiResponse({ status: 200, description: 'PNG image', content: { 'image/png': {} } })
+  @ApiResponse({
+    status: 200,
+    description: 'PNG image',
+    content: { 'image/png': {} },
+  })
   async getCode128(@Query('text') text: string): Promise<StreamableFile> {
     const buffer = await this.barcodeService.generateCode128(text);
     return new StreamableFile(buffer);
@@ -23,7 +33,11 @@ export class BarcodeController {
   @Header('Content-Type', 'image/png')
   @ApiOperation({ summary: 'Generate QR code as PNG' })
   @ApiQuery({ name: 'text', required: true, description: 'Text to encode' })
-  @ApiResponse({ status: 200, description: 'PNG image', content: { 'image/png': {} } })
+  @ApiResponse({
+    status: 200,
+    description: 'PNG image',
+    content: { 'image/png': {} },
+  })
   async getQR(@Query('text') text: string): Promise<StreamableFile> {
     const buffer = await this.barcodeService.generateQR(text);
     return new StreamableFile(buffer);

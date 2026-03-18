@@ -42,7 +42,11 @@ export class PrintSolutionService {
         where,
         skip,
         take: limit,
-        orderBy: [{ documentType: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
+        orderBy: [
+          { documentType: 'asc' },
+          { sortOrder: 'asc' },
+          { createdAt: 'desc' },
+        ],
       }),
       this.prisma.printSolution.count({ where }),
     ]);
@@ -72,8 +76,12 @@ export class PrintSolutionService {
         ...(dto.documentType != null && { documentType: dto.documentType }),
         ...(dto.name != null && { name: dto.name }),
         ...(dto.templateBody != null && { templateBody: dto.templateBody }),
-        ...(dto.reportWidthMm !== undefined && { reportWidthMm: dto.reportWidthMm }),
-        ...(dto.reportHeightMm !== undefined && { reportHeightMm: dto.reportHeightMm }),
+        ...(dto.reportWidthMm !== undefined && {
+          reportWidthMm: dto.reportWidthMm,
+        }),
+        ...(dto.reportHeightMm !== undefined && {
+          reportHeightMm: dto.reportHeightMm,
+        }),
         ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }),
         ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
       },

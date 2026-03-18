@@ -1,12 +1,5 @@
 // Updated: 2026-03-14 - Phase 3: by-location endpoint, getInventory binLocationId
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -56,7 +49,9 @@ export class InventoryController {
   }
 
   @Get('by-location')
-  @ApiOperation({ summary: 'List inventory by location (location list, paginated)' })
+  @ApiOperation({
+    summary: 'List inventory by location (location list, paginated)',
+  })
   @ApiQuery({ name: 'warehouseId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -160,7 +155,11 @@ export class InventoryController {
   @ApiQuery({ name: 'skuId', required: false })
   @ApiQuery({ name: 'warehouseId', required: false })
   @ApiQuery({ name: 'type', required: false, enum: LedgerType })
-  @ApiQuery({ name: 'referenceType', required: false, description: 'e.g. TRANSFER for move records' })
+  @ApiQuery({
+    name: 'referenceType',
+    required: false,
+    description: 'e.g. TRANSFER for move records',
+  })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -180,7 +179,7 @@ export class InventoryController {
     return this.inventoryService.getLedger(tenantId, {
       skuId,
       warehouseId,
-      type: type as LedgerType | undefined,
+      type: type,
       referenceType,
       startDate,
       endDate,

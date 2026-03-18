@@ -8,7 +8,10 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { PaginationDto, PaginatedResponseDto } from '../common/dto/pagination.dto';
+import {
+  PaginationDto,
+  PaginatedResponseDto,
+} from '../common/dto/pagination.dto';
 
 @Injectable()
 export class UsersService {
@@ -19,7 +22,9 @@ export class UsersService {
       where: { email_tenantId: { email: dto.email, tenantId } },
     });
     if (existing) {
-      throw new ConflictException('User with this email already exists in this tenant');
+      throw new ConflictException(
+        'User with this email already exists in this tenant',
+      );
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);

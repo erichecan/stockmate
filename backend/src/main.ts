@@ -8,7 +8,9 @@ import { AppModule } from './app.module';
 /** CORS：env 显式配置 + 任意 *.run.app（Cloud Run）+ localhost */
 function getAllowedOrigins(): string[] {
   const fromEnv = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
+    ? process.env.CORS_ORIGIN.split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
     : [];
   // 2026-03-14T19:50:00 本地开发: 允许批发站前端 4000 端口访问
   const localhost = [
@@ -28,7 +30,10 @@ async function bootstrap() {
 
   const corsOrigins = getAllowedOrigins();
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
       if (!origin) return callback(null, true);
       const inList = corsOrigins.includes(origin);
       const isCloudRun = CLOUD_RUN_ORIGIN.test(origin);

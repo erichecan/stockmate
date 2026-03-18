@@ -2,10 +2,20 @@
 // 2026-03-14
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsArray,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class ReceiptIdsDto {
-  @ApiProperty({ description: '收货单 ID 列表', type: [String], example: ['uuid-1', 'uuid-2'] })
+  @ApiProperty({
+    description: '收货单 ID 列表',
+    type: [String],
+    example: ['uuid-1', 'uuid-2'],
+  })
   @IsArray()
   @IsUUID('4', { each: true })
   @IsNotEmpty()
@@ -33,7 +43,9 @@ export class PutawayCompleteDto {
   @IsUUID('4')
   warehouseId!: string;
 
-  @ApiPropertyOptional({ description: '各明细上架库位（不传则不入库到具体库位）' })
+  @ApiPropertyOptional({
+    description: '各明细上架库位（不传则不入库到具体库位）',
+  })
   @IsOptional()
   @IsArray()
   items?: PutawayItemDto[];

@@ -1,13 +1,6 @@
 // 库存冻结单 API
 // Updated: 2026-03-14
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,

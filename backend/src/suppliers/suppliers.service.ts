@@ -38,12 +38,7 @@ export class SuppliersService {
     });
   }
 
-  async findAll(
-    tenantId: string,
-    search?: string,
-    page = 1,
-    limit = 20,
-  ) {
+  async findAll(tenantId: string, search?: string, page = 1, limit = 20) {
     const skip = (page - 1) * limit;
 
     const where: Prisma.SupplierWhereInput = { tenantId };
@@ -85,7 +80,9 @@ export class SuppliersService {
         where: { code: dto.code, tenantId, id: { not: id } },
       });
       if (existing) {
-        throw new ConflictException(`Supplier code "${dto.code}" already exists`);
+        throw new ConflictException(
+          `Supplier code "${dto.code}" already exists`,
+        );
       }
     }
 

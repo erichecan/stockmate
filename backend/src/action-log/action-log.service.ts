@@ -39,7 +39,12 @@ export class ActionLogService {
   /** 分页查询操作日志列表 */
   async findPage(
     tenantId: string,
-    params: { page?: number; limit?: number; entityType?: string; action?: string },
+    params: {
+      page?: number;
+      limit?: number;
+      entityType?: string;
+      action?: string;
+    },
   ) {
     const page = params.page ?? 1;
     const limit = params.limit ?? 20;
@@ -55,7 +60,11 @@ export class ActionLogService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { user: { select: { id: true, email: true, firstName: true, lastName: true } } },
+        include: {
+          user: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
+        },
       }),
       this.prisma.actionLog.count({ where }),
     ]);

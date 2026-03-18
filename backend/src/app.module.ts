@@ -1,4 +1,4 @@
-// Updated: 2026-03-17T12:00:00 - 后端第三部分：NotificationsModule、CashbookModule
+// Updated: 2026-03-18T23:33:00 - 注册正式 WMS 波次实体模块
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
@@ -28,6 +28,7 @@ import { WholesaleModule } from './wholesale/wholesale.module';
 import { PricingModule } from './pricing/pricing.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CashbookModule } from './cashbook/cashbook.module';
+import { WmsWavesModule } from './wms-waves/wms-waves.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { CashbookModule } from './cashbook/cashbook.module';
     PricingModule,
     NotificationsModule,
     CashbookModule,
+    WmsWavesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

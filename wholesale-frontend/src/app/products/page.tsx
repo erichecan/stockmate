@@ -1,7 +1,7 @@
-// 2026-03-16T23:18:00 - Product catalog with category sidebar, search, grid view
+// 2026-03-17T10:10:00 - 产品目录: 无限滚动 + 批量库存查询优化
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
@@ -12,6 +12,7 @@ import {
   Grid3X3,
   List,
   ChevronRight,
+  Loader2,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/auth-store';
@@ -28,7 +29,6 @@ type CategoryNode = {
   children?: CategoryNode[];
 };
 
-// Updated: 2026-03-16T23:52:00 - P0 闭环: 与后端 PublicProductListItemDto/WholesaleProductListItemDto 对齐
 type Product = {
   id: string;
   name: string;
@@ -46,22 +46,28 @@ type Product = {
   }>;
 };
 
+const PAGE_SIZE = 50;
+
 function ProductsContent() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
   const { isAuthenticated, initialize } = useAuthStore();
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const observerRef = useRef<HTMLDivElement>(null);
+  const hasMore = products.length < total;
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
-  // Updated: 2026-03-16T23:45:00 - P0 闭环: 分类筛选通过 API categoryId 参数
   useEffect(() => {
     const tenantSlug = process.env.NEXT_PUBLIC_TENANT_SLUG || 'test-company';
     api
@@ -70,34 +76,74 @@ function ProductsContent() {
       .catch(() => {});
   }, []);
 
-  // Updated: 2026-03-17T00:15:00 - P0 闭环: 认证用户走 /products（含价格/库存），未登录走 /public/products
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
+  // 2026-03-17T10:12:00 - 筛选/搜索变化时重置到第 1 页
+  const fetchProducts = useCallback(
+    async (pageNum: number, append: boolean) => {
+      if (pageNum === 1) setLoading(true);
+      else setLoadingMore(true);
+
       try {
-        const params: Record<string, string> = {};
+        const params: Record<string, string | number> = {
+          page: pageNum,
+          limit: PAGE_SIZE,
+        };
         if (initialQuery) params.q = initialQuery;
         if (selectedCategory) params.categoryId = selectedCategory;
 
+        let result: { data: Product[]; total: number };
+
         if (isAuthenticated) {
-          const { data } = await api.get('/products', { params });
-          setProducts(data || []);
+          const { data: resp } = await api.get('/products', { params });
+          result = resp;
         } else {
-          const tenantSlug = process.env.NEXT_PUBLIC_TENANT_SLUG || 'test-company';
-          params.tenantSlug = tenantSlug;
-          const { data } = await api.get('/public/products', { params });
-          setProducts(data || []);
+          params.tenantSlug =
+            process.env.NEXT_PUBLIC_TENANT_SLUG || 'test-company';
+          const { data: resp } = await api.get('/public/products', { params });
+          result = resp;
         }
+
+        const items = result?.data ?? [];
+        const totalCount = result?.total ?? 0;
+
+        setProducts((prev) => (append ? [...prev, ...items] : items));
+        setTotal(totalCount);
       } catch {
-        setProducts([]);
+        if (!append) setProducts([]);
       } finally {
         setLoading(false);
+        setLoadingMore(false);
       }
-    };
-    load();
-  }, [initialQuery, selectedCategory, isAuthenticated]);
+    },
+    [initialQuery, selectedCategory, isAuthenticated],
+  );
 
-  const filteredProducts = products;
+  useEffect(() => {
+    setPage(1);
+    fetchProducts(1, false);
+  }, [fetchProducts]);
+
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return;
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchProducts(nextPage, true);
+  }, [page, loadingMore, hasMore, fetchProducts]);
+
+  // 2026-03-17T10:13:00 - IntersectionObserver 触发无限滚动
+  useEffect(() => {
+    const el = observerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          loadMore();
+        }
+      },
+      { rootMargin: '400px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, loading, loadMore]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -108,7 +154,9 @@ function ProductsContent() {
             Products
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {filteredProducts.length} products available
+            {loading
+              ? 'Loading...'
+              : `${products.length} of ${total} products`}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -231,7 +279,7 @@ function ProductsContent() {
                 />
               ))}
             </div>
-          ) : filteredProducts.length === 0 ? (
+          ) : products.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center gap-3 py-16">
                 <Package className="h-12 w-12 text-muted-foreground/40" />
@@ -247,26 +295,48 @@ function ProductsContent() {
                 </Button>
               </CardContent>
             </Card>
-          ) : viewMode === 'grid' ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredProducts.map((p) => (
-                <ProductCardGrid
-                  key={p.id}
-                  product={p}
-                  isAuthenticated={isAuthenticated}
-                />
-              ))}
-            </div>
           ) : (
-            <div className="space-y-3">
-              {filteredProducts.map((p) => (
-                <ProductCardList
-                  key={p.id}
-                  product={p}
-                  isAuthenticated={isAuthenticated}
-                />
-              ))}
-            </div>
+            <>
+              {viewMode === 'grid' ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {products.map((p) => (
+                    <ProductCardGrid
+                      key={p.id}
+                      product={p}
+                      isAuthenticated={isAuthenticated}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {products.map((p) => (
+                    <ProductCardList
+                      key={p.id}
+                      product={p}
+                      isAuthenticated={isAuthenticated}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* 无限滚动触发器 + 加载更多按钮 */}
+              <div ref={observerRef} className="mt-6 flex justify-center">
+                {loadingMore ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading more...
+                  </div>
+                ) : hasMore ? (
+                  <Button variant="outline" onClick={loadMore}>
+                    Load More ({products.length} / {total})
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    All {total} products loaded
+                  </p>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>

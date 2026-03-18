@@ -94,7 +94,9 @@ export class CategoriesService {
         where: { code: dto.code, tenantId, id: { not: id } },
       });
       if (existing) {
-        throw new ConflictException(`Category code "${dto.code}" already exists`);
+        throw new ConflictException(
+          `Category code "${dto.code}" already exists`,
+        );
       }
     }
 

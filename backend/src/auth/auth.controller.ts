@@ -56,7 +56,10 @@ export class AuthController {
     } catch (err) {
       if (err instanceof HttpException) throw err;
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`wholesale/login 500: ${message}`, err instanceof Error ? err.stack : undefined);
+      this.logger.error(
+        `wholesale/login 500: ${message}`,
+        err instanceof Error ? err.stack : undefined,
+      );
       throw new InternalServerErrorException({
         message: '登录服务异常',
         detail: message,
