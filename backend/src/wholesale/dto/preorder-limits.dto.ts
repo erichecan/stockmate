@@ -1,7 +1,8 @@
-// Updated: 2026-03-17T14:30:00 - Admin 预售限购 DTO
+// Updated: 2026-03-18T22:49:30 - 修复 tier 字段白名单校验，支持等级限购入参
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsEnum,
   IsInt,
   IsOptional,
   Min,
@@ -13,6 +14,7 @@ import { CustomerTier } from '@prisma/client';
 
 export class PreorderTierLimitDto {
   @ApiProperty({ enum: CustomerTier })
+  @IsEnum(CustomerTier)
   tier!: CustomerTier;
 
   @ApiProperty({ example: 10, minimum: 1 })
