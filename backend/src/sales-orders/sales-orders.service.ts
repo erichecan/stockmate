@@ -69,6 +69,91 @@ export class SalesOrdersService {
     return `${prefix}${String(count + 1).padStart(4, '0')}`;
   }
 
+  // Updated: 2026-03-19T00:31:30 - 识别 Neon 事务 WebSocket 建连失败
+  private isNeonTransactionWsError(error: unknown): boolean {
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : '';
+    return (
+      message.includes('All attempts to open a WebSocket') ||
+      message.includes('websocketconstructor') ||
+      message.includes('fetch failed')
+    );
+  }
+
+  // Updated: 2026-03-19T00:31:30 - 事务失败时的降级创建逻辑（非事务）
+  private async createWithoutTransaction(
+    tenantId: string,
+    customerId: string,
+    customerTier: CustomerTier,
+    dto: CreateSalesOrderDto,
+    source: OrderSource,
+    status: SOStatus,
+  ) {
+    const orderNumber = await this.generateOrderNumber(tenantId);
+    const pricedItems: Array<{
+      skuId: string;
+      quantity: number;
+      unitPrice: number;
+    }> = [];
+
+    for (const item of dto.items) {
+      const sku = await this.prisma.sku.findFirst({
+        where: { id: item.skuId, tenantId },
+        include: { product: true },
+      });
+      if (!sku) throw new NotFoundException(`SKU ${item.skuId} not found`);
+      const unitPrice = await this.getUnitPrice(
+        tenantId,
+        sku.wholesalePrice,
+        customerTier,
+      );
+      pricedItems.push({
+        skuId: item.skuId,
+        quantity: item.quantity,
+        unitPrice,
+      });
+    }
+
+    const totalAmount = pricedItems.reduce(
+      (sum, item) => sum + item.unitPrice * item.quantity,
+      0,
+    );
+
+    const so = await this.prisma.salesOrder.create({
+      data: {
+        orderNumber,
+        tenantId,
+        customerId,
+        warehouseId: dto.warehouseId,
+        currency: dto.currency ?? 'EUR',
+        notes: dto.notes,
+        status,
+        source,
+      },
+    });
+
+    for (const item of pricedItems) {
+      await this.prisma.salesOrderItem.create({
+        data: {
+          salesOrderId: so.id,
+          skuId: item.skuId,
+          quantity: item.quantity,
+          unitPrice: new Prisma.Decimal(item.unitPrice),
+        },
+      });
+    }
+
+    return this.prisma.salesOrder.update({
+      where: { id: so.id },
+      data: { totalAmount: new Prisma.Decimal(totalAmount) },
+      include: SO_INCLUDE,
+    });
+  }
+
   async create(
     tenantId: string,
     dto: CreateSalesOrderDto,
@@ -88,52 +173,67 @@ export class SalesOrdersService {
     if (!customer.isActive)
       throw new BadRequestException('Customer is inactive');
 
-    const orderNumber = await this.generateOrderNumber(tenantId);
-    let totalAmount = 0;
+    try {
+      const orderNumber = await this.generateOrderNumber(tenantId);
+      let totalAmount = 0;
 
-    return this.prisma.$transaction(async (tx) => {
-      const so = await tx.salesOrder.create({
-        data: {
-          orderNumber,
-          tenantId,
-          customerId: dto.customerId,
-          warehouseId: dto.warehouseId,
-          currency: dto.currency ?? 'EUR',
-          notes: dto.notes,
-          status,
-          source,
-        },
-      });
-
-      for (const item of dto.items) {
-        const sku = await tx.sku.findFirst({
-          where: { id: item.skuId, tenantId },
-          include: { product: true },
-        });
-        if (!sku) throw new NotFoundException(`SKU ${item.skuId} not found`);
-        const unitPrice = await this.getUnitPrice(
-          tenantId,
-          sku.wholesalePrice,
-          customer.tier,
-        );
-        const lineTotal = unitPrice * item.quantity;
-        totalAmount += lineTotal;
-        await tx.salesOrderItem.create({
+      return await this.prisma.$transaction(async (tx) => {
+        const so = await tx.salesOrder.create({
           data: {
-            salesOrderId: so.id,
-            skuId: item.skuId,
-            quantity: item.quantity,
-            unitPrice: new Prisma.Decimal(unitPrice),
+            orderNumber,
+            tenantId,
+            customerId: dto.customerId,
+            warehouseId: dto.warehouseId,
+            currency: dto.currency ?? 'EUR',
+            notes: dto.notes,
+            status,
+            source,
           },
         });
-      }
 
-      return tx.salesOrder.update({
-        where: { id: so.id },
-        data: { totalAmount: new Prisma.Decimal(totalAmount) },
-        include: SO_INCLUDE,
+        for (const item of dto.items) {
+          const sku = await tx.sku.findFirst({
+            where: { id: item.skuId, tenantId },
+            include: { product: true },
+          });
+          if (!sku) throw new NotFoundException(`SKU ${item.skuId} not found`);
+          const unitPrice = await this.getUnitPrice(
+            tenantId,
+            sku.wholesalePrice,
+            customer.tier,
+          );
+          const lineTotal = unitPrice * item.quantity;
+          totalAmount += lineTotal;
+          await tx.salesOrderItem.create({
+            data: {
+              salesOrderId: so.id,
+              skuId: item.skuId,
+              quantity: item.quantity,
+              unitPrice: new Prisma.Decimal(unitPrice),
+            },
+          });
+        }
+
+        return tx.salesOrder.update({
+          where: { id: so.id },
+          data: { totalAmount: new Prisma.Decimal(totalAmount) },
+          include: SO_INCLUDE,
+        });
       });
-    });
+    } catch (error) {
+      if (!this.isNeonTransactionWsError(error)) {
+        throw error;
+      }
+      // Updated: 2026-03-19T00:31:30 - Neon 事务链路异常时降级为非事务创建，确保下单主流程可用
+      return this.createWithoutTransaction(
+        tenantId,
+        dto.customerId,
+        customer.tier,
+        dto,
+        source,
+        status,
+      );
+    }
   }
 
   async findAll(
