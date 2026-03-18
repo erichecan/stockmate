@@ -1,4 +1,4 @@
-// 2026-03-17T00:20:00 - Pre-order / Futures: upcoming container shipments, pay deposit to lock allocation
+// 2026-03-17T12:35:45 - Pre-order: 限购展示（等级限购优先）、下单前前端校验并提示
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -37,6 +37,10 @@ type PreorderItem = {
   available: number;
   reserved: number;
   minQty: number;
+  /** 等级限购（优先） */
+  limitPerTier?: number;
+  /** 用户限购 */
+  limitPerUser?: number;
 };
 
 type ContainerShipment = {
@@ -56,9 +60,9 @@ const DEMO_SHIPMENTS: ContainerShipment[] = [
     eta: '2026-04-02',
     status: 'in-transit',
     items: [
-      { id: 'pre-1', name: 'iPhone 17 Pro Silicone Case - Assorted', skuCode: 'PRE-IP17P-CASE', category: 'Cases', wholesalePrice: 3.8, depositPercent: 30, available: 3000, reserved: 1200, minQty: 50 },
-      { id: 'pre-2', name: 'iPhone 17 Tempered Glass 0.3mm', skuCode: 'PRE-IP17-GLASS', category: 'Screen Protectors', wholesalePrice: 0.95, depositPercent: 30, available: 5000, reserved: 2800, minQty: 100 },
-      { id: 'pre-3', name: '100W GaN USB-C Charger', skuCode: 'PRE-CHG100W-GAN', category: 'Chargers', wholesalePrice: 10.5, depositPercent: 50, available: 500, reserved: 180, minQty: 20 },
+      { id: 'pre-1', name: 'iPhone 17 Pro Silicone Case - Assorted', skuCode: 'PRE-IP17P-CASE', category: 'Cases', wholesalePrice: 3.8, depositPercent: 30, available: 3000, reserved: 1200, minQty: 50, limitPerTier: 200, limitPerUser: 500 },
+      { id: 'pre-2', name: 'iPhone 17 Tempered Glass 0.3mm', skuCode: 'PRE-IP17-GLASS', category: 'Screen Protectors', wholesalePrice: 0.95, depositPercent: 30, available: 5000, reserved: 2800, minQty: 100, limitPerTier: 500, limitPerUser: 1000 },
+      { id: 'pre-3', name: '100W GaN USB-C Charger', skuCode: 'PRE-CHG100W-GAN', category: 'Chargers', wholesalePrice: 10.5, depositPercent: 50, available: 500, reserved: 180, minQty: 20, limitPerTier: 50, limitPerUser: 100 },
     ],
   },
   {
@@ -68,8 +72,8 @@ const DEMO_SHIPMENTS: ContainerShipment[] = [
     eta: '2026-04-15',
     status: 'arriving-soon',
     items: [
-      { id: 'pre-4', name: 'MagSafe 3-in-1 Wireless Charger', skuCode: 'PRE-MAG3IN1-V2', category: 'Chargers', wholesalePrice: 9.8, depositPercent: 30, available: 800, reserved: 500, minQty: 20 },
-      { id: 'pre-5', name: 'Type-C Hub 7-in-1 USB-C', skuCode: 'PRE-HUB7IN1', category: 'Accessories', wholesalePrice: 7.5, depositPercent: 30, available: 600, reserved: 200, minQty: 30 },
+      { id: 'pre-4', name: 'MagSafe 3-in-1 Wireless Charger', skuCode: 'PRE-MAG3IN1-V2', category: 'Chargers', wholesalePrice: 9.8, depositPercent: 30, available: 800, reserved: 500, minQty: 20, limitPerTier: 100 },
+      { id: 'pre-5', name: 'Type-C Hub 7-in-1 USB-C', skuCode: 'PRE-HUB7IN1', category: 'Accessories', wholesalePrice: 7.5, depositPercent: 30, available: 600, reserved: 200, minQty: 30, limitPerUser: 200 },
     ],
   },
   {
@@ -79,7 +83,7 @@ const DEMO_SHIPMENTS: ContainerShipment[] = [
     eta: '2026-05-01',
     status: 'in-transit',
     items: [
-      { id: 'pre-6', name: 'Samsung Galaxy S25 Ultra Case Pack', skuCode: 'PRE-S25U-PACK', category: 'Cases', wholesalePrice: 4.2, depositPercent: 30, available: 2000, reserved: 800, minQty: 50 },
+      { id: 'pre-6', name: 'Samsung Galaxy S25 Ultra Case Pack', skuCode: 'PRE-S25U-PACK', category: 'Cases', wholesalePrice: 4.2, depositPercent: 30, available: 2000, reserved: 800, minQty: 50, limitPerTier: 300, limitPerUser: 600 },
     ],
   },
 ];
@@ -115,9 +119,25 @@ function PreorderContent() {
     setQuantities((prev) => ({ ...prev, [id]: Math.max(minQty, qty) }));
   };
 
+  /** 获取有效限购数：等级限购优先，其次用户限购 */
+  const getEffectiveLimit = (item: PreorderItem) => {
+    if (item.limitPerTier != null && item.limitPerTier > 0) return item.limitPerTier;
+    if (item.limitPerUser != null && item.limitPerUser > 0) return item.limitPerUser;
+    return null;
+  };
+
   const handleReserve = async (item: PreorderItem) => {
-    setReserving(item.id);
     const qty = getQty(item.id, item.minQty);
+    const limit = getEffectiveLimit(item);
+    if (limit != null && qty > limit) {
+      toast.error(`Limit: max ${limit} units per order (tier limit applies)`);
+      return;
+    }
+    if (item.available - item.reserved < qty) {
+      toast.error(`Only ${item.available - item.reserved} units available`);
+      return;
+    }
+    setReserving(item.id);
     const deposit = item.wholesalePrice * qty * (item.depositPercent / 100);
     try {
       await api.post('/preorders/reserve', {
@@ -257,6 +277,15 @@ function PreorderContent() {
                               </span>
                             </div>
 
+                            {/* 限购展示：等级限购优先 */}
+                            {getEffectiveLimit(item) != null && (
+                              <p className="text-xs font-medium text-amber-600">
+                                Limit: max {getEffectiveLimit(item)} units
+                                {item.limitPerTier != null && item.limitPerTier > 0 && ' (tier)'}
+                                {item.limitPerUser != null && item.limitPerUser > 0 && !item.limitPerTier && ' (per user)'}
+                              </p>
+                            )}
+
                             {/* Allocation progress */}
                             <div className="max-w-xs space-y-1">
                               <div className="flex justify-between text-xs text-muted-foreground">
@@ -323,7 +352,8 @@ function PreorderContent() {
                               onClick={() => handleReserve(item)}
                               disabled={
                                 reserving === item.id ||
-                                item.available - item.reserved < qty
+                                item.available - item.reserved < qty ||
+                                (getEffectiveLimit(item) != null && qty > (getEffectiveLimit(item) ?? 0))
                               }
                             >
                               {reserving === item.id ? (

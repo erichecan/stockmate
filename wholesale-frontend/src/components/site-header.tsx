@@ -1,4 +1,4 @@
-// 2026-03-17T00:30:00 - B2B header with auth-aware nav, quick-action links for logged-in users
+// 2026-03-17T12:38:00 - B2B header: add Admin nav link
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -18,6 +18,7 @@ import {
   LayoutGrid,
   Tag,
   Ship,
+  Shield,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/auth-store';
@@ -34,6 +35,7 @@ const QUICK_NAV = [
   { href: '/bulk-order', label: 'Bulk', icon: LayoutGrid },
   { href: '/deals', label: 'Deals', icon: Tag },
   { href: '/preorder', label: 'Pre-Order', icon: Ship },
+  { href: '/admin', label: 'Admin', icon: Shield },
 ];
 
 export function SiteHeader() {

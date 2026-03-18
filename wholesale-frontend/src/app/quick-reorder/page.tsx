@@ -1,8 +1,9 @@
-// 2026-03-17T00:05:00 - Quick Reorder: one-click repeat last purchase, adjust qty, instant checkout
+// 2026-03-17T12:34:56 - Quick Reorder: 最近5单多选合并，调用 GET /reorder/candidates、POST /reorder/merge-draft，生成 draft 后跳转 /orders/draft/[id]
 'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   RefreshCw,
   ShoppingCart,
@@ -10,7 +11,6 @@ import {
   Plus,
   Trash2,
   ArrowLeft,
-  ArrowRight,
   Package,
   Check,
 } from 'lucide-react';
@@ -34,10 +34,27 @@ type ReorderItem = {
   newQty: number;
   selected: boolean;
   inStock: boolean;
+  orderId?: string;
+};
+
+type CandidateOrder = {
+  id: string;
+  orderNumber: string;
+  createdAt: string;
+  items: Array<{
+    skuId: string;
+    skuCode?: string;
+    skuName?: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
 };
 
 function QuickReorderContent() {
+  const router = useRouter();
   const { isAuthenticated } = useAuthStore();
+  const [candidates, setCandidates] = useState<CandidateOrder[]>([]);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [items, setItems] = useState<ReorderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -46,38 +63,98 @@ function QuickReorderContent() {
     if (!isAuthenticated) return;
     const load = async () => {
       try {
-        const { data } = await api.get('/orders', { params: { limit: 1 } });
-        const lastOrder = data?.data?.[0] || data?.[0];
-        if (lastOrder?.items) {
-          setItems(
-            lastOrder.items.map((item: { skuId: string; skuCode?: string; skuName?: string; quantity: number; unitPrice: number }) => ({
-              skuId: item.skuId,
-              skuCode: item.skuCode || '',
-              name: item.skuName || '',
-              wholesalePrice: Number(item.unitPrice),
-              lastQty: item.quantity,
-              newQty: item.quantity,
-              selected: true,
-              inStock: true,
-            }))
-          );
+        const { data } = await api.get('/reorder/candidates');
+        const orders = data?.orders ?? data?.data ?? [];
+        if (Array.isArray(orders) && orders.length > 0) {
+          setCandidates(orders.slice(0, 5));
+          const merged = mergeOrderItems(orders.slice(0, 5));
+          setItems(merged);
+          setSelectedOrderIds(new Set(orders.slice(0, 5).map((o: CandidateOrder) => o.id)));
+        } else {
+          const fallback = await loadFallbackFromOrders();
+          setCandidates(fallback.orders);
+          setItems(fallback.items);
+          setSelectedOrderIds(new Set(fallback.orders.map((o) => o.id)));
         }
       } catch {
-        // Demo data
-        setItems([
-          { skuId: '1', skuCode: 'CASE-IP16P-BLK', name: 'iPhone 16 Pro Silicone Case - Black', wholesalePrice: 3.5, lastQty: 50, newQty: 50, selected: true, inStock: true },
-          { skuId: '2', skuCode: 'CASE-IP16P-CLR', name: 'iPhone 16 Pro Crystal Clear Case', wholesalePrice: 2.8, lastQty: 100, newQty: 100, selected: true, inStock: true },
-          { skuId: '3', skuCode: 'CABLE-TC-1M', name: 'Type-C Fast Charging Cable 1m', wholesalePrice: 1.2, lastQty: 200, newQty: 200, selected: true, inStock: true },
-          { skuId: '4', skuCode: 'GLASS-IP16PM', name: 'Tempered Glass iPhone 16 Pro Max', wholesalePrice: 0.85, lastQty: 300, newQty: 300, selected: true, inStock: true },
-          { skuId: '5', skuCode: 'CHG-20W-USB', name: '20W USB-C PD Charger', wholesalePrice: 4.5, lastQty: 50, newQty: 50, selected: true, inStock: true },
-          { skuId: '6', skuCode: 'CABLE-LTN-1M', name: 'Lightning Cable 1m MFi Certified', wholesalePrice: 2.0, lastQty: 100, newQty: 100, selected: false, inStock: false },
-        ]);
+        const fallback = await loadFallbackFromOrders();
+        setCandidates(fallback.orders);
+        setItems(fallback.items);
+        setSelectedOrderIds(new Set(fallback.orders.map((o) => o.id)));
       } finally {
         setLoading(false);
       }
     };
     load();
   }, [isAuthenticated]);
+
+  async function loadFallbackFromOrders(): Promise<{ orders: CandidateOrder[]; items: ReorderItem[] }> {
+    try {
+      const { data } = await api.get('/orders', { params: { limit: 5 } });
+      const arr = data?.data ?? data ?? [];
+      const orders: CandidateOrder[] = Array.isArray(arr)
+        ? arr.map((o: Record<string, unknown>) => ({
+            id: String(o.id ?? ''),
+            orderNumber: String(o.orderNumber ?? o.id ?? ''),
+            createdAt: String(o.createdAt ?? new Date().toISOString()),
+            items: Array.isArray(o.items)
+              ? (o.items as CandidateOrder['items'])
+              : [],
+          }))
+        : [];
+      const merged = mergeOrderItems(orders);
+      return { orders, items: merged };
+    } catch {
+      return {
+        orders: [],
+        items: [
+          { skuId: '1', skuCode: 'CASE-IP16P-BLK', name: 'iPhone 16 Pro Silicone Case - Black', wholesalePrice: 3.5, lastQty: 50, newQty: 50, selected: true, inStock: true },
+          { skuId: '2', skuCode: 'CABLE-TC-1M', name: 'Type-C Fast Charging Cable 1m', wholesalePrice: 1.2, lastQty: 200, newQty: 200, selected: true, inStock: true },
+        ],
+      };
+    }
+  }
+
+  function mergeOrderItems(orders: CandidateOrder[]): ReorderItem[] {
+    const bySku = new Map<string, ReorderItem>();
+    for (const order of orders) {
+      for (const it of order.items || []) {
+        const skuId = it.skuId;
+        const existing = bySku.get(skuId);
+        const qty = Number(it.quantity) || 0;
+        const price = Number(it.unitPrice) || 0;
+        const name = it.skuName || it.skuCode || '';
+        const code = it.skuCode || '';
+        if (existing) {
+          existing.lastQty += qty;
+          existing.newQty += qty;
+        } else {
+          bySku.set(skuId, {
+            skuId,
+            skuCode: code,
+            name,
+            wholesalePrice: price,
+            lastQty: qty,
+            newQty: qty,
+            selected: true,
+            inStock: true,
+          });
+        }
+      }
+    }
+    return Array.from(bySku.values());
+  }
+
+  const toggleOrder = (orderId: string) => {
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      const selectedOrders = candidates.filter((o) => next.has(o.id));
+      setItems(mergeOrderItems(selectedOrders));
+      return next;
+    });
+  };
 
   const toggleSelect = (skuId: string) => {
     setItems((prev) =>
@@ -114,17 +191,33 @@ function QuickReorderContent() {
   const totalUnits = selectedItems.reduce((sum, item) => sum + item.newQty, 0);
   const allSelected = items.filter((i) => i.inStock).every((i) => i.selected);
 
-  const handleAddAllToCart = async () => {
+  const handleMergeAndGoToDraft = async () => {
     if (selectedItems.length === 0) return;
     setSubmitting(true);
     try {
+      const orderIds = Array.from(selectedOrderIds);
+      const { data } = await api.post('/reorder/merge-draft', {
+        orderIds: orderIds.length ? orderIds : undefined,
+        items: selectedItems.map((i) => ({ skuId: i.skuId, quantity: i.newQty })),
+      });
+      const draftId = data?.id ?? data?.draftId ?? data?.orderId;
+      if (draftId) {
+        toast.success('Draft created');
+        router.push(`/orders/draft/${draftId}`);
+      } else {
+        toast.error('No draft ID returned');
+      }
+    } catch (err) {
+      toast.error('Failed to create draft. Try adding to cart instead.');
       for (const item of selectedItems) {
-        await api.post('/cart/items', { skuId: item.skuId, qty: item.newQty });
+        try {
+          await api.post('/cart/items', { skuId: item.skuId, quantity: item.newQty });
+        } catch {
+          // ignore
+        }
       }
       toast.success(`${selectedItems.length} items added to cart`);
-      window.location.href = '/cart';
-    } catch {
-      toast.error('Failed to add items to cart');
+      router.push('/cart');
     } finally {
       setSubmitting(false);
     }
@@ -142,7 +235,6 @@ function QuickReorderContent() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
-      {/* Header */}
       <div className="mb-6">
         <Link
           href="/"
@@ -160,13 +252,13 @@ function QuickReorderContent() {
               Quick Reorder
             </h1>
             <p className="text-sm text-muted-foreground">
-              Your last order items — adjust quantities and reorder instantly
+              Select from your last 5 orders — merge into draft and edit before checkout
             </p>
           </div>
         </div>
       </div>
 
-      {items.length === 0 ? (
+      {candidates.length === 0 && items.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-16">
             <Package className="h-16 w-16 text-muted-foreground/30" />
@@ -183,9 +275,38 @@ function QuickReorderContent() {
         </Card>
       ) : (
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Items list */}
           <div className="space-y-2 lg:col-span-2">
-            {/* Select all */}
+            {candidates.length > 0 && (
+              <Card className="mb-4">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Recent Orders (select to merge)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {candidates.map((order) => (
+                    <div
+                      key={order.id}
+                      className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          checked={selectedOrderIds.has(order.id)}
+                          onCheckedChange={() => toggleOrder(order.id)}
+                          aria-label={`Select order ${order.orderNumber}`}
+                        />
+                        <span className="font-medium">{order.orderNumber}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(order.createdAt).toLocaleDateString('en-IE')}
+                        </span>
+                      </div>
+                      <Badge variant="outline">
+                        {(order.items || []).length} items
+                      </Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
             <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
               <Checkbox
                 checked={allSelected}
@@ -216,7 +337,7 @@ function QuickReorderContent() {
                           {item.name}
                         </h3>
                         <p className="text-xs text-muted-foreground">
-                          SKU: {item.skuCode} · Last ordered: {item.lastQty} units
+                          SKU: {item.skuCode} · Last: {item.lastQty} units
                         </p>
                       </div>
                       <button
@@ -282,11 +403,10 @@ function QuickReorderContent() {
             ))}
           </div>
 
-          {/* Summary */}
           <div className="lg:col-span-1">
             <Card className="sticky top-20">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Reorder Summary</CardTitle>
+                <CardTitle className="text-base">Merge to Draft</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2 text-sm">
@@ -310,22 +430,22 @@ function QuickReorderContent() {
                 <Button
                   size="lg"
                   className="w-full gap-2"
-                  onClick={handleAddAllToCart}
+                  onClick={handleMergeAndGoToDraft}
                   disabled={selectedItems.length === 0 || submitting}
                 >
                   {submitting ? (
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
                   ) : (
                     <>
-                      <ShoppingCart className="h-5 w-5" />
-                      Add to Cart & Checkout
+                      <Check className="h-5 w-5" />
+                      Merge & Edit Draft
                     </>
                   )}
                 </Button>
                 <p className="text-center text-xs text-muted-foreground">
                   {selectedItems.length === 0
                     ? 'Select items to proceed'
-                    : `${selectedItems.length} items · ${totalUnits} units`}
+                    : `Creates draft → edit → pay`}
                 </p>
               </CardContent>
             </Card>

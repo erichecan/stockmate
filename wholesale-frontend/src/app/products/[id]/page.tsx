@@ -25,12 +25,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 
-// Updated: 2026-03-16T23:50:30 - P0 闭环: SKU 类型与后端 WholesaleSkuDto 对齐
+// Updated: 2026-03-17T12:39:00 - SKU 类型: 添加 retailPrice 以修复构建
 type Sku = {
   id: string;
   code: string;
   variantAttributes?: Record<string, string>;
   wholesalePrice?: number;
+  retailPrice?: number;
   minOrderQty?: number;
   stockStatus?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
 };
