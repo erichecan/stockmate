@@ -7,10 +7,8 @@ function swapVolusionVariant(input: string, variant: '2' | '3' | '4' | '2T'): st
     `-${variant}$1`,
   );
   if (withKnownVariant !== input) return withKnownVariant;
-  return input.replace(
-    /(\.(?:jpg|jpeg|png|webp)(?:\?.*)?)$/i,
-    `-${variant}$1`,
-  );
+  // Updated: 2026-03-19T11:13:45 - 非标准后缀（如 -0.jpg）不做后缀拼接，避免生成不存在的 URL
+  return input;
 }
 
 function toPreferredSourceUrl(input: string, scene: ImageScene): string {

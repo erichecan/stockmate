@@ -163,8 +163,9 @@ export default function AdminWavesPage() {
       <tbody>
         ${pickItems
           .map(
+            // Updated: 2026-03-19T11:22:18 - Bin 显示库位，缺货在 Qty 显示“缺货”
             (it) =>
-              `<tr><td>${it.binCode}</td><td>${it.skuCode}</td><td>${it.skuName}</td><td>${it.quantity}</td></tr>`,
+              `<tr><td>${it.binCode || '-'}</td><td>${it.skuCode}</td><td>${it.skuName}</td><td>${it.shortage ? '缺货' : (it.totalQty ?? it.quantity ?? 0)}</td></tr>`,
           )
           .join('')}
       </tbody>
@@ -307,7 +308,8 @@ export default function AdminWavesPage() {
             <ul className="space-y-1 text-sm">
               {pickItems.map((it, idx) => (
                 <li key={`${it.skuCode}-${idx}`} className="rounded border px-2 py-1">
-                  {it.binCode} | {it.skuCode} | {it.skuName} x {it.quantity}
+                  {it.binCode} | {it.skuCode} | {it.skuName} x{' '}
+                  {it.shortage ? '缺货' : (it.totalQty ?? it.quantity ?? 0)}
                 </li>
               ))}
             </ul>

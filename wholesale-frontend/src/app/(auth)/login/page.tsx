@@ -28,6 +28,7 @@ const TEST_ACCOUNT = {
   password: 'Test1234!',
   tenantSlug: 'test-company',
 };
+const DEMO_ROUTE = '/demo';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -82,8 +83,12 @@ export default function LoginPage() {
         if (slugToSave) localStorage.setItem(LAST_TENANT_KEY, slugToSave);
       }
       toast.success('Login successful');
+      // Updated: 2026-03-19T12:06:48 - 演示账号登录后默认进入演示驾驶舱
+      const isDemoLogin =
+        email.trim().toLowerCase() === TEST_ACCOUNT.email &&
+        (tenantSlug.trim() || user?.tenantSlug) === TEST_ACCOUNT.tenantSlug;
       setTimeout(() => {
-        window.location.replace('/');
+        window.location.replace(isDemoLogin ? DEMO_ROUTE : '/');
       }, 0);
     } catch (err: unknown) {
       const res = (

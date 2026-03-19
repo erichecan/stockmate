@@ -93,6 +93,17 @@ export class WholesaleProductsController {
     private readonly inventoryService: InventoryService,
   ) {}
 
+  // Updated: 2026-03-19T12:18:55 - 统一校验批发登录用户对应 customer，避免重复查询逻辑
+  private async requireWholesaleCustomer(
+    tenantId: string,
+    customerId: string,
+  ) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { id: customerId, tenantId },
+    });
+    return customer;
+  }
+
   private async resolveMobigoDescription(product: {
     id: string;
     description: string | null;
@@ -292,9 +303,7 @@ export class WholesaleProductsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const customer = await this.prisma.customer.findFirst({
-      where: { id: customerId, tenantId },
-    });
+    const customer = await this.requireWholesaleCustomer(tenantId, customerId);
     if (!customer) {
       return { data: [], total: 0, page: 1, limit: 50 };
     }
@@ -320,6 +329,19 @@ export class WholesaleProductsController {
       where.OR = [
         { name: { contains: q.trim(), mode: 'insensitive' } },
         { nameEn: { contains: q.trim(), mode: 'insensitive' } },
+        // Updated: 2026-03-19T12:18:55 - 商品检索支持品牌名、SKU、条码
+        { brand: { name: { contains: q.trim(), mode: 'insensitive' } } },
+        {
+          skus: {
+            some: {
+              isActive: true,
+              OR: [
+                { code: { contains: q.trim(), mode: 'insensitive' } },
+                { barcode: { contains: q.trim(), mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
       ];
     }
 
@@ -374,6 +396,106 @@ export class WholesaleProductsController {
     );
 
     return { data, total, page: pageNum, limit: limitNum };
+  }
+
+  @Get('products/search/suggestions')
+  @ApiOperation({
+    summary:
+      'Wholesale SKU suggestions for bulk order (supports sku/name/brand/barcode)',
+  })
+  @ApiQuery({ name: 'q', required: true })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getWholesaleSkuSuggestions(
+    @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('customerId') customerId: string,
+    @Query('q') q: string,
+    @Query('limit') limit?: string,
+  ) {
+    const customer = await this.requireWholesaleCustomer(tenantId, customerId);
+    if (!customer || !q?.trim()) {
+      return [];
+    }
+    const limitNum = Math.min(20, Math.max(1, parseInt(limit || '8', 10) || 8));
+    const keyword = q.trim();
+
+    const skus = await this.prisma.sku.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        product: { status: 'ACTIVE' },
+        OR: [
+          { code: { contains: keyword, mode: 'insensitive' } },
+          { barcode: { contains: keyword, mode: 'insensitive' } },
+          { product: { name: { contains: keyword, mode: 'insensitive' } } },
+          { product: { nameEn: { contains: keyword, mode: 'insensitive' } } },
+          { product: { brand: { name: { contains: keyword, mode: 'insensitive' } } } },
+        ],
+      },
+      include: {
+        product: { include: { brand: true } },
+      },
+      orderBy: [{ code: 'asc' }],
+      take: limitNum,
+    });
+
+    const availabilityMap = await this.inventoryService.getBatchSkuAvailability(
+      tenantId,
+      skus.map((sku) => sku.id),
+    );
+
+    return Promise.all(
+      skus.map(async (sku) => ({
+        code: sku.code,
+        name: sku.product.name,
+        brandName: sku.product.brand?.name ?? null,
+        price: await this.salesOrdersService.getUnitPrice(
+          tenantId,
+          sku.wholesalePrice,
+          customer.tier,
+        ),
+        stock: availabilityMap.get(sku.id) ?? 0,
+      })),
+    );
+  }
+
+  @Get('products/sku/:keyword')
+  @ApiOperation({
+    summary: 'Resolve wholesale SKU by exact code/barcode for bulk order line',
+  })
+  async resolveWholesaleSkuByCode(
+    @Param('keyword') keyword: string,
+    @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('customerId') customerId: string,
+  ) {
+    const customer = await this.requireWholesaleCustomer(tenantId, customerId);
+    if (!customer || !keyword?.trim()) {
+      return null;
+    }
+    const exact = keyword.trim();
+    const sku = await this.prisma.sku.findFirst({
+      where: {
+        tenantId,
+        isActive: true,
+        product: { status: 'ACTIVE' },
+        OR: [
+          { code: { equals: exact, mode: 'insensitive' } },
+          { barcode: { equals: exact, mode: 'insensitive' } },
+        ],
+      },
+      include: { product: true },
+    });
+    if (!sku) return null;
+    const summary = await this.inventoryService.getSkuInventorySummary(tenantId, sku.id);
+    return {
+      code: sku.code,
+      name: sku.product.name,
+      wholesalePrice: await this.salesOrdersService.getUnitPrice(
+        tenantId,
+        sku.wholesalePrice,
+        customer.tier,
+      ),
+      stock: summary.available,
+    };
   }
 
   @Get('products/:id')

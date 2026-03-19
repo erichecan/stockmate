@@ -41,6 +41,7 @@ type BulkLineItem = {
 type SkuSuggestion = {
   code: string;
   name: string;
+  brandName?: string | null;
   price: number;
   stock: number;
 };
@@ -153,6 +154,64 @@ function BulkOrderContent() {
   const [suggestions, setSuggestions] = useState<SkuSuggestion[]>([]);
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const suggestionsRef = useRef<HTMLDivElement | null>(null);
+  const suggestionRequestIdRef = useRef(0);
+  const suggestionTimerRef = useRef<number | null>(null);
+
+  const loadSuggestions = useCallback(async (lineId: string, keyword: string) => {
+    const q = keyword.trim();
+    if (!q) {
+      setSuggestions([]);
+      setActiveSuggestionLine(null);
+      setHighlightIndex(-1);
+      return;
+    }
+    const requestId = ++suggestionRequestIdRef.current;
+    try {
+      // Updated: 2026-03-19T12:20:40 - 批量下单联动后端模糊检索，支持 SKU/品名/品牌/条码
+      const { data } = await api.get('/products/search/suggestions', {
+        params: { q, limit: 8 },
+      });
+      if (requestId !== suggestionRequestIdRef.current) return;
+      const remote = Array.isArray(data) ? (data as SkuSuggestion[]) : [];
+      if (remote.length > 0) {
+        setSuggestions(remote);
+        setActiveSuggestionLine(lineId);
+        setHighlightIndex(-1);
+        return;
+      }
+    } catch {
+      // ignore and fallback to local demo suggestions
+    }
+    const local = fuzzyMatch(q);
+    if (requestId !== suggestionRequestIdRef.current) return;
+    setSuggestions(local);
+    setActiveSuggestionLine(lineId);
+    setHighlightIndex(-1);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (suggestionTimerRef.current) {
+        window.clearTimeout(suggestionTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Updated: 2026-03-19T12:22:20 - 点击下拉外部时收起建议列表
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (suggestionsRef.current && target && !suggestionsRef.current.contains(target)) {
+        setActiveSuggestionLine(null);
+        setSuggestions([]);
+        setHighlightIndex(-1);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const selectSuggestion = useCallback((lineId: string, suggestion: SkuSuggestion) => {
     setLines((prev) =>
@@ -181,17 +240,18 @@ function BulkOrderContent() {
 
   const resolveSku = useCallback(async (lineId: string, sku: string) => {
     if (!sku.trim()) return;
-
-    const upperSku = sku.trim().toUpperCase();
+    const keyword = sku.trim();
+    const upperSku = keyword.toUpperCase();
 
     try {
-      const { data } = await api.get(`/products/sku/${upperSku}`);
+      const { data } = await api.get(`/products/sku/${encodeURIComponent(keyword)}`);
       if (data) {
         setLines((prev) =>
           prev.map((line) =>
             line.id === lineId
               ? {
                   ...line,
+                  skuInput: data.code || upperSku,
                   resolved: true,
                   resolvedName: data.name,
                   resolvedPrice: Number(data.wholesalePrice),
@@ -250,11 +310,13 @@ function BulkOrderContent() {
     // 2026-03-17T03:33:00 - Trigger fuzzy suggestions on SKU input change
     if (field === 'skuInput') {
       const q = String(value).trim();
+      if (suggestionTimerRef.current) {
+        window.clearTimeout(suggestionTimerRef.current);
+      }
       if (q.length >= 1) {
-        const matched = fuzzyMatch(q);
-        setSuggestions(matched);
-        setActiveSuggestionLine(lineId);
-        setHighlightIndex(-1);
+        suggestionTimerRef.current = window.setTimeout(() => {
+          loadSuggestions(lineId, q);
+        }, 200);
       } else {
         setSuggestions([]);
         setActiveSuggestionLine(null);
@@ -465,10 +527,7 @@ function BulkOrderContent() {
                         onKeyDown={(e) => handleSkuKeyDown(line.id, e)}
                         onFocus={() => {
                           if (line.skuInput.trim().length >= 1 && !line.resolved) {
-                            const matched = fuzzyMatch(line.skuInput.trim());
-                            setSuggestions(matched);
-                            setActiveSuggestionLine(line.id);
-                            setHighlightIndex(-1);
+                            loadSuggestions(line.id, line.skuInput.trim());
                           }
                         }}
                         onBlur={() => {
@@ -530,6 +589,11 @@ function BulkOrderContent() {
                                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                                     {highlightText(s.name, inputLower)}
                                   </p>
+                                  {s.brandName ? (
+                                    <p className="mt-0.5 text-[10px] text-muted-foreground/80">
+                                      Brand: {highlightText(s.brandName, inputLower)}
+                                    </p>
+                                  ) : null}
                                 </div>
                                 <span className="flex-shrink-0 text-[10px] text-muted-foreground">
                                   {s.stock} in stock

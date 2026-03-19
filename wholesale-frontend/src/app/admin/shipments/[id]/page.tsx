@@ -1,7 +1,7 @@
-// Updated: 2026-03-18T23:15:20 - 到柜详情页接入库存联动与状态更新
+// Updated: 2026-03-19T00:44:49-0400 - 清理 any 类型并提升类型安全
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -25,6 +25,36 @@ type ShipmentItemStock = {
   availableStock: number;
 };
 
+type ShipmentItemsWithStockResponse = {
+  shipment?: unknown;
+  items?: ShipmentItemStock[];
+};
+
+type ShipmentSummary = {
+  id: string;
+  containerNo?: string | null;
+  vesselName?: string | null;
+  eta?: string | null;
+  status: string;
+};
+
+// Updated: 2026-03-19T00:44:49-0400 - 类型守卫用于安全解析 API 错误响应
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (!isRecord(error)) return '状态更新失败';
+  const response = error.response;
+  if (!isRecord(response)) return '状态更新失败';
+  const data = response.data;
+  if (!isRecord(data)) return '状态更新失败';
+  const message = data.message;
+  return typeof message === 'string' && message.length > 0
+    ? message
+    : '状态更新失败';
+}
+
 const STATUS_OPTIONS = [
   'PENDING',
   'LOADING',
@@ -44,33 +74,38 @@ export default function AdminShipmentDetailPage() {
   const id = params.id as string;
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const [shipment, setShipment] = useState<any>(null);
+  const [shipment, setShipment] = useState<ShipmentSummary | null>(null);
   const [itemsWithStock, setItemsWithStock] = useState<ShipmentItemStock[]>([]);
   const [status, setStatus] = useState<string>('');
 
-  const load = async () => {
+  // Updated: 2026-03-19T00:47:47-0400 - 使用 useCallback 稳定 load 引用，消除 useEffect 依赖告警
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [shipmentRes, itemsRes] = await Promise.all([
         authApi.get('/purchasing/shipments', { params: { purchaseOrderId: undefined } }),
         authApi.get(`/purchasing/shipments/${id}/items-with-stock`),
       ]);
-      const shipments = Array.isArray(shipmentRes.data) ? shipmentRes.data : [];
-      const current = shipments.find((s: any) => s.id === id) || null;
+      const shipments = Array.isArray(shipmentRes.data)
+        ? (shipmentRes.data as ShipmentSummary[])
+        : [];
+      const current = shipments.find((s) => s.id === id) || null;
       setShipment(current);
       setStatus(current?.status || '');
-      setItemsWithStock(Array.isArray(itemsRes.data) ? itemsRes.data : []);
+      // Updated: 2026-03-19T00:41:46-0400 - 修复接口响应结构解析，正确读取 packing list items
+      const itemsPayload = (itemsRes.data ?? {}) as ShipmentItemsWithStockResponse;
+      setItemsWithStock(Array.isArray(itemsPayload.items) ? itemsPayload.items : []);
     } catch {
       setShipment(null);
       setItemsWithStock([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     load();
-  }, [id]);
+  }, [load]);
 
   const patchStatus = async () => {
     if (!status) return;
@@ -79,8 +114,8 @@ export default function AdminShipmentDetailPage() {
       await authApi.patch(`/purchasing/shipments/${id}/status`, { status });
       toast.success('状态已更新');
       await load();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || '状态更新失败');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error));
     } finally {
       setUpdating(false);
     }

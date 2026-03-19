@@ -19,6 +19,7 @@ import {
   Tag,
   Ship,
   Shield,
+  Presentation,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/auth-store';
@@ -35,6 +36,8 @@ const QUICK_NAV = [
   { href: '/bulk-order', label: 'Bulk', icon: LayoutGrid },
   { href: '/deals', label: 'Deals', icon: Tag },
   { href: '/preorder', label: 'Pre-Order', icon: Ship },
+  // Updated: 2026-03-19T12:07:17 - 演示账号快捷入口，支持随时进入演示驾驶舱
+  { href: '/demo', label: 'Demo', icon: Presentation },
   { href: '/admin', label: 'Admin', icon: Shield },
 ];
 

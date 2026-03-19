@@ -12,7 +12,7 @@
  */
 
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, ShipmentStatus } from '@prisma/client';
 import { PrismaNeon } from '@prisma/adapter-neon';
 
 const connectionString = process.env['DATABASE_URL'] || process.env['DIRECT_DATABASE_URL'];
@@ -252,67 +252,121 @@ async function main() {
 
   console.log(`📊 库存: 处理 ${inventoryScenarios.length} 条场景, 新增 ${created} 条,  ledger +${ledgerCreated}`);
 
-  // ===== 5. 装箱单 (外箱条码) - 关联到一个采购单的 Shipment =====
-  const po = await prisma.purchaseOrder.findFirst({
+  // ===== 5. 到柜预报演示数据：多货柜 + 多状态 + 多 SKU 装箱单 =====
+  // Updated: 2026-03-19T00:38:28-0400 - 扩展 Shipment 种子，覆盖到柜预报全状态并提升演示真实度
+  const purchaseOrders = await prisma.purchaseOrder.findMany({
     where: { tenantId },
-    include: { items: { include: { sku: true } } },
+    include: { items: { include: { sku: { include: { product: true } } } } },
+    orderBy: { createdAt: 'asc' },
   });
 
+  const shipmentSeedTag = '[DEMO_SHIPMENTS_V2_20260319]';
+  const activePurchaseOrders = purchaseOrders.filter((po) => po.items.length > 0);
   let packingCount = 0;
+  let shipmentCreated = 0;
+  let shipmentUpdated = 0;
 
-  if (po && po.items.length > 0) {
-    let ship = await prisma.shipment.findFirst({
-      where: { purchaseOrderId: po.id },
-    });
-    if (!ship) {
-      ship = await prisma.shipment.create({
-        data: {
-          purchaseOrderId: po.id,
-          tenantId,
-          containerNo: 'MSKU1234567',
-          vesselName: 'COSCO SHIPPING',
-          status: 'IN_TRANSIT',
-          etd: new Date('2026-02-20'),
-          eta: new Date('2026-03-15'),
-          portOfLoading: 'Shenzhen (CNSZX)',
-          portOfDischarge: 'Los Angeles (USLAX)',
-        },
+  if (activePurchaseOrders.length > 0) {
+    const statusPlan: ShipmentStatus[] = [
+      ShipmentStatus.IN_TRANSIT,
+      ShipmentStatus.ARRIVED,
+      ShipmentStatus.ARRIVED_PORT,
+      ShipmentStatus.AT_WAREHOUSE_PENDING_UNLOAD,
+      ShipmentStatus.UNLOADING_COUNTING_RECEIVING,
+    ];
+    const vesselNames = [
+      'COSCO SHIPPING',
+      'EVERGREEN',
+      'MAERSK AURORA',
+      'CMA CGM HORIZON',
+      'OOCL PACIFIC',
+      'HAPAG-LLOYD NOVA',
+    ];
+    const totalDemoShipments = 18;
+
+    for (let i = 0; i < totalDemoShipments; i++) {
+      const po = activePurchaseOrders[i % activePurchaseOrders.length];
+      const status = statusPlan[i % statusPlan.length];
+      const etaOffsetDaysByStatus: Record<ShipmentStatus, number> = {
+        [ShipmentStatus.PENDING]: 18,
+        [ShipmentStatus.LOADING]: 14,
+        [ShipmentStatus.LOADED]: 12,
+        [ShipmentStatus.IN_TRANSIT]: 7,
+        [ShipmentStatus.ARRIVED]: -1,
+        [ShipmentStatus.ARRIVED_PORT]: 1,
+        [ShipmentStatus.AT_WAREHOUSE_PENDING_UNLOAD]: 2,
+        [ShipmentStatus.UNLOADING_COUNTING_RECEIVING]: 3,
+        [ShipmentStatus.RECEIVING]: 5,
+        [ShipmentStatus.DELIVERED]: 8,
+        [ShipmentStatus.COMPLETED]: 10,
+      };
+      const etaOffsetDays = etaOffsetDaysByStatus[status] ?? 7;
+      const now = new Date();
+      const eta = new Date(now);
+      eta.setDate(now.getDate() + etaOffsetDays);
+      const etd = new Date(eta);
+      etd.setDate(eta.getDate() - (18 + (i % 6)));
+
+      // 使用高位数编号，尽量降低与真实业务箱号冲突概率。
+      const containerNo = `MSKU9${String(100000 + i).padStart(6, '0')}`;
+      const vesselName = vesselNames[i % vesselNames.length];
+      const existingShip = await prisma.shipment.findFirst({
+        where: { tenantId, containerNo },
       });
-    }
 
-    // 先删除该 Shipment 下已有装箱单，避免重复运行累积
-    await prisma.packingListItem.deleteMany({ where: { shipmentId: ship.id } });
+      const shipmentData = {
+        purchaseOrderId: po.id,
+        tenantId,
+        containerNo,
+        vesselName,
+        status,
+        etd,
+        eta,
+        portOfLoading: 'Shenzhen (CNSZX)',
+        portOfDischarge: 'Dublin (IEDUB)',
+        notes: `${shipmentSeedTag} demo-index=${i + 1}`,
+      };
 
-    // 创建 12 个外箱的装箱单（外箱条码）
-    const cartonItems: Array<{ cartonNo: string; skuCode: string; skuName: string; qty: number }> = [];
-    const items = po.items;
-    for (let c = 1; c <= 12; c++) {
-      const item = items[(c - 1) % items.length];
-      cartonItems.push({
-        cartonNo: `CTN-${String(c).padStart(3, '0')}`,
-        skuCode: item.sku.code,
-        skuName: (item.sku as { product?: { name: string }; code: string }).product?.name ?? item.sku.code,
-        qty: 20 + (c % 5) * 5,
-      });
-    }
+      const ship = existingShip
+        ? await prisma.shipment.update({
+            where: { id: existingShip.id },
+            data: shipmentData,
+          })
+        : await prisma.shipment.create({
+            data: shipmentData,
+          });
 
-    for (const ci of cartonItems) {
-      const barcode = `PL-${ci.cartonNo}-${ci.skuCode}`;
-      await prisma.packingListItem.create({
-        data: {
-          shipmentId: ship.id,
-          cartonNo: ci.cartonNo,
-          skuCode: ci.skuCode,
-          skuName: ci.skuName,
-          quantity: ci.qty,
-          barcode,
-        },
-      });
-      packingCount++;
+      if (existingShip) shipmentUpdated++;
+      else shipmentCreated++;
+
+      // 先清空该货柜旧装箱单，保证可重复执行且不会累计垃圾数据。
+      await prisma.packingListItem.deleteMany({ where: { shipmentId: ship.id } });
+
+      const cartonsPerShipment = 12 + (i % 10); // 12~21 箱/柜
+      for (let c = 1; c <= cartonsPerShipment; c++) {
+        const item = po.items[(c - 1) % po.items.length];
+        const cartonNo = `CTN-${String(i + 1).padStart(3, '0')}-${String(c).padStart(3, '0')}`;
+        const barcode = `PL-${cartonNo}-${item.sku.code}`;
+        await prisma.packingListItem.create({
+          data: {
+            shipmentId: ship.id,
+            cartonNo,
+            skuCode: item.sku.code,
+            skuName: item.sku.product?.name ?? item.sku.code,
+            quantity: 12 + ((c + i) % 9) * 6, // 12~60，制造“每柜货很多且杂”
+            barcode,
+          },
+        });
+        packingCount++;
+      }
     }
+  } else {
+    console.log('⚠️ 未找到包含采购明细的采购单，跳过 Shipment 演示数据生成。');
   }
 
-  console.log(`📦 装箱单: ${packingCount} 条外箱记录 (外箱条码格式: PL-CTN-XXX-SKU)`);
+  console.log(
+    `📦 到柜预报: 货柜新增 ${shipmentCreated} / 更新 ${shipmentUpdated}，装箱单 ${packingCount} 条 (外箱条码格式: PL-CTN-XXX-XXX-SKU)`,
+  );
 
   // ===== 6. 输出说明文档 =====
   const docPath = 'docs/warehouse-inventory-barcode-demo.md';
