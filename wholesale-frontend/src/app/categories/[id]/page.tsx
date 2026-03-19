@@ -77,7 +77,15 @@ export default function CategoryPage({ params }: CategoryPageProps) {
             : undefined,
         });
 
-        setItems(Array.isArray(res.data) ? res.data : []);
+        // Updated: 2026-03-19T00:56:18 - 兼容分页返回 { data: Product[] }，避免类目页误判为空
+        const payload = res?.data;
+        if (Array.isArray(payload)) {
+          setItems(payload);
+        } else if (Array.isArray(payload?.data)) {
+          setItems(payload.data);
+        } else {
+          setItems([]);
+        }
       } catch (_e) {
         setError('加载类目商品失败，请稍后重试');
       } finally {

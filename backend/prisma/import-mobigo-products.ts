@@ -17,6 +17,8 @@ type MobigoProduct = {
   url: string;
   code?: string;
   name?: string;
+  // Updated: 2026-03-19T10:36:35 - 导入商品描述（来自 Mobigo 抓取）
+  description?: string;
   priceText?: string;
   currency?: string;
   categories?: string[];
@@ -27,6 +29,12 @@ type ImportStats = {
   productsCreated: number;
   skusCreated: number;
   productsSkippedExisting: number;
+};
+
+type FlatCategory = {
+  id: string;
+  name: string;
+  parentId: string | null;
 };
 
 function parsePrice(priceText?: string): { amount?: string; currency?: string } {
@@ -58,6 +66,169 @@ async function ensureCategory(tenantId: string): Promise<string> {
     select: { id: true },
   });
   return created.id;
+}
+
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/["'`]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildCategoryDepthMap(categories: FlatCategory[]): Map<string, number> {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const depthMap = new Map<string, number>();
+  const getDepth = (id: string): number => {
+    if (depthMap.has(id)) return depthMap.get(id)!;
+    const current = byId.get(id);
+    if (!current) return 0;
+    if (!current.parentId) {
+      depthMap.set(id, 0);
+      return 0;
+    }
+    const depth = getDepth(current.parentId) + 1;
+    depthMap.set(id, depth);
+    return depth;
+  };
+  for (const c of categories) getDepth(c.id);
+  return depthMap;
+}
+
+function scoreCategory(productNameNorm: string, categoryName: string, depth: number): number {
+  const categoryNorm = normalizeText(categoryName);
+  if (!categoryNorm) return -1;
+  if (productNameNorm.includes(categoryNorm)) {
+    return 2000 + categoryNorm.length * 10 + depth * 20;
+  }
+  const tokens = categoryNorm.split(' ').filter((t) => t.length >= 3);
+  if (!tokens.length) return -1;
+  let hits = 0;
+  for (const t of tokens) {
+    if (productNameNorm.includes(t)) hits += 1;
+  }
+  if (hits === 0) return -1;
+  const hitRatio = hits / tokens.length;
+  return Math.round(hitRatio * 1000 + hits * 30 + depth * 20);
+}
+
+function pickFallbackCategoryId(
+  productNameNorm: string,
+  categoryByNameNorm: Map<string, string>,
+): string | null {
+  const fallbackRules: Array<{ re: RegExp; categoryNames: string[] }> = [
+    { re: /\biphone\b/, categoryNames: ['apple iphone cases', 'iphone 手机壳'] },
+    { re: /\bgalaxy\b|\bsamsung\b/, categoryNames: ['samsung galaxy cases'] },
+    { re: /\bhuawei\b/, categoryNames: ['huawei cases'] },
+    { re: /\bnokia\b/, categoryNames: ['nokia cases'] },
+    { re: /\bipad\b|\btablet\b/, categoryNames: ['tablet cases covers'] },
+    { re: /\bairpod\b|\bair tags?\b/, categoryNames: ['airpod cases air tags'] },
+    { re: /\bpower\s*bank\b/, categoryNames: ['power bank'] },
+    { re: /\bcharger\b|\bplug\b/, categoryNames: ['chargers and plugs'] },
+    { re: /\bcable\b|\btype c\b|\busb\b/, categoryNames: ['cable adapter'] },
+    {
+      re: /\bscreen\s*protector\b|\btempered\b|\bglass\b/,
+      categoryNames: ['screen protector', 'tablet tempered glass'],
+    },
+  ];
+  for (const rule of fallbackRules) {
+    if (!rule.re.test(productNameNorm)) continue;
+    for (const name of rule.categoryNames) {
+      const id = categoryByNameNorm.get(name);
+      if (id) return id;
+    }
+  }
+  // Updated: 2026-03-19T00:05:50 - 最终兜底分类，避免新导入商品落到 Mobigo Imported
+  if (/\blcd\b|\bbattery\b|\badhesive\b|\btape\b|\bdigitizer\b/.test(productNameNorm)) {
+    return categoryByNameNorm.get('parts') || null;
+  }
+  return categoryByNameNorm.get('accessories') || null;
+}
+
+function pickBestCategoryId(
+  productName: string,
+  sourceCategories: string[] | undefined,
+  rootCategoryId: string,
+  categories: FlatCategory[],
+  depthMap: Map<string, number>,
+): string {
+  // Updated: 2026-03-19T10:23:50 - 导入时优先使用 Mobigo 原始面包屑类目映射
+  const breadcrumbCategoryId = pickCategoryIdFromBreadcrumb(
+    sourceCategories,
+    rootCategoryId,
+    categories,
+    depthMap,
+  );
+  if (breadcrumbCategoryId) {
+    return breadcrumbCategoryId;
+  }
+
+  const nameNorm = normalizeText(productName);
+  const categoryByNameNorm = new Map<string, string>(
+    categories.map((c) => [normalizeText(c.name), c.id]),
+  );
+  let best: { id: string; score: number } | null = null;
+  for (const c of categories) {
+    if (c.id === rootCategoryId) continue;
+    const score = scoreCategory(nameNorm, c.name, depthMap.get(c.id) ?? 0);
+    // Updated: 2026-03-19T00:02:40 - 降低阈值以提升型号关键词匹配覆盖率
+    if (score < 700) continue;
+    if (!best || score > best.score) best = { id: c.id, score };
+  }
+  if (best?.id) return best.id;
+  return pickFallbackCategoryId(nameNorm, categoryByNameNorm) || rootCategoryId;
+}
+
+function pickCategoryIdFromBreadcrumb(
+  sourceCategories: string[] | undefined,
+  rootCategoryId: string,
+  categories: FlatCategory[],
+  depthMap: Map<string, number>,
+): string | null {
+  if (!sourceCategories?.length) return null;
+
+  const byNameNorm = new Map<string, FlatCategory[]>();
+  for (const category of categories) {
+    if (category.id === rootCategoryId) continue;
+    const normalized = normalizeText(category.name);
+    if (!normalized) continue;
+    const list = byNameNorm.get(normalized) ?? [];
+    list.push(category);
+    byNameNorm.set(normalized, list);
+  }
+
+  const pickDeepest = (list: FlatCategory[]): string =>
+    [...list]
+      .sort((a, b) => (depthMap.get(b.id) ?? 0) - (depthMap.get(a.id) ?? 0))[0]
+      .id;
+
+  // 先从最深层 breadcrumb 开始做精确匹配
+  for (let i = sourceCategories.length - 1; i >= 0; i -= 1) {
+    const sourceNorm = normalizeText(sourceCategories[i]);
+    if (!sourceNorm) continue;
+    const exact = byNameNorm.get(sourceNorm);
+    if (exact?.length) return pickDeepest(exact);
+  }
+
+  // 精确失败时做弱匹配（包含关系），避免轻微命名差异导致全部回退
+  let best: { id: string; score: number } | null = null;
+  for (let i = sourceCategories.length - 1; i >= 0; i -= 1) {
+    const sourceNorm = normalizeText(sourceCategories[i]);
+    if (!sourceNorm) continue;
+    for (const category of categories) {
+      if (category.id === rootCategoryId) continue;
+      const targetNorm = normalizeText(category.name);
+      if (!targetNorm) continue;
+      if (!targetNorm.includes(sourceNorm) && !sourceNorm.includes(targetNorm)) continue;
+      const depth = depthMap.get(category.id) ?? 0;
+      const score = depth * 100 + Math.min(sourceNorm.length, targetNorm.length);
+      if (!best || score > best.score) {
+        best = { id: category.id, score };
+      }
+    }
+  }
+  return best?.id ?? null;
 }
 
 async function ensureBrand(tenantId: string, brandName?: string): Promise<string | undefined> {
@@ -92,7 +263,9 @@ function guessBrandName(p: MobigoProduct): string | undefined {
 
 async function importLine(
   tenantId: string,
-  categoryId: string,
+  rootCategoryId: string,
+  categories: FlatCategory[],
+  depthMap: Map<string, number>,
   p: MobigoProduct,
   stats: ImportStats,
 ): Promise<void> {
@@ -114,6 +287,14 @@ async function importLine(
   const price = amount ? amount : undefined;
 
   const brandId = await ensureBrand(tenantId, guessBrandName(p));
+  // Updated: 2026-03-19T10:24:05 - 导入时优先按 Mobigo 面包屑类目匹配，失败再回退商品名称匹配
+  const categoryId = pickBestCategoryId(
+    p.name,
+    p.categories,
+    rootCategoryId,
+    categories,
+    depthMap,
+  );
 
   const product = await prisma.product.create({
     data: {
@@ -121,7 +302,8 @@ async function importLine(
       categoryId,
       brandId,
       name: p.name,
-      description: p.url,
+      // Updated: 2026-03-19T10:36:35 - 优先使用抓取描述，缺失时回退 sourceUrl
+      description: p.description?.trim() || p.url,
       status: ProductStatus.ACTIVE,
       images: p.imageUrls && p.imageUrls.length ? p.imageUrls : undefined,
       tags: ['MOBIGO'],
@@ -165,6 +347,11 @@ async function main() {
   }
 
   const categoryId = await ensureCategory(tenant.id);
+  const categories = await prisma.category.findMany({
+    where: { tenantId: tenant.id, isActive: true },
+    select: { id: true, name: true, parentId: true },
+  });
+  const depthMap = buildCategoryDepthMap(categories);
 
   const stats: ImportStats = {
     productsCreated: 0,
@@ -182,7 +369,7 @@ async function main() {
     if (!trimmed) continue;
     try {
       const parsed = JSON.parse(trimmed) as MobigoProduct;
-      await importLine(tenant.id, categoryId, parsed, stats);
+      await importLine(tenant.id, categoryId, categories, depthMap, parsed, stats);
     } catch (e) {
       console.warn('跳过无法解析的行:', e);
     }

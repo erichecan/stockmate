@@ -14,6 +14,8 @@ type MobigoProduct = {
   url: string;
   code?: string;
   name?: string;
+  // Updated: 2026-03-19T10:36:20 - 抓取商品描述，供详情页展示与导入
+  description?: string;
   priceText?: string;
   currency?: string;
   categories?: string[];
@@ -88,6 +90,39 @@ function parseProduct(url: string, html: string): MobigoProduct {
     }
   }
 
+  // Updated: 2026-03-19T10:36:20 - 解析商品描述（优先详细描述区，回退商品说明区）
+  const descriptionSelectors = [
+    '#ProductDescription',
+    '.productdescription',
+    '[itemprop="description"]',
+    '.tab-content',
+    '.product-tabs',
+    'meta[name="description"]',
+  ];
+  let description: string | undefined;
+  for (const selector of descriptionSelectors) {
+    const node = $(selector).first();
+    if (!node.length) continue;
+    // Updated: 2026-03-19T10:45:10 - meta 描述使用 content，其余节点使用 text
+    const raw =
+      selector.startsWith('meta[') ? node.attr('content') || '' : node.text();
+    const text = raw.replace(/\s+/g, ' ').trim();
+    if (text && text.length >= 10) {
+      description = text.slice(0, 4000);
+      break;
+    }
+  }
+  if (!description) {
+    // Updated: 2026-03-19T10:46:35 - 兼容大小写不规则的 meta 标签描述
+    const metaMatch = html.match(
+      /<meta[^>]*name=["']?description["']?[^>]*content=["']([^"']+)["'][^>]*>/i,
+    );
+    const metaText = metaMatch?.[1]?.replace(/\s+/g, ' ').trim();
+    if (metaText && metaText.length >= 10) {
+      description = metaText.slice(0, 4000);
+    }
+  }
+
   // 面包屑分类
   const categories: string[] = [];
   $('a[href*="SearchResults.asp?Cat="], nav a').each((_, el) => {
@@ -124,6 +159,7 @@ function parseProduct(url: string, html: string): MobigoProduct {
     url,
     code,
     name,
+    description,
     priceText,
     currency,
     categories: categories.length ? Array.from(new Set(categories)) : undefined,

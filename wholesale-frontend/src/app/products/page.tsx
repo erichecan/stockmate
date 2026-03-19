@@ -17,6 +17,7 @@ import {
 
 import { useAuthStore } from '@/lib/auth-store';
 import api from '@/lib/api';
+import { toImageProxyUrl } from '@/lib/image-proxy';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,6 +27,7 @@ type CategoryNode = {
   id: string;
   name: string;
   nameEn?: string;
+  productCount?: number;
   children?: CategoryNode[];
 };
 
@@ -47,6 +49,61 @@ type Product = {
 };
 
 const PAGE_SIZE = 50;
+
+function CategoryTreeButtons({
+  nodes,
+  selectedCategory,
+  onSelect,
+  level = 0,
+}: {
+  nodes: CategoryNode[];
+  selectedCategory: string | null;
+  onSelect: (categoryId: string) => void;
+  level?: number;
+}) {
+  return (
+    <>
+      {nodes.map((cat) => {
+        // Updated: 2026-03-19T10:48:25 - 0 商品类目默认置灰并禁用点击，减少空页筛选
+        const isDisabled = (cat.productCount ?? 0) <= 0;
+        return (
+          <div key={cat.id}>
+            <button
+              onClick={() => {
+                if (!isDisabled) onSelect(cat.id);
+              }}
+              disabled={isDisabled}
+              aria-disabled={isDisabled}
+              className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors duration-200 ${
+                isDisabled
+                  ? 'cursor-not-allowed text-muted-foreground/55'
+                  : selectedCategory === cat.id
+                    ? 'bg-primary/10 font-medium text-primary'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+              }`}
+              style={{ paddingLeft: `${8 + level * 14}px` }}
+            >
+              <span className="truncate">
+                {(cat.nameEn || cat.name) + ` (${cat.productCount ?? 0})`}
+              </span>
+              {cat.children && cat.children.length > 0 && (
+                <ChevronRight className="h-3 w-3 shrink-0" />
+              )}
+            </button>
+            {cat.children && cat.children.length > 0 && (
+              <CategoryTreeButtons
+                nodes={cat.children}
+                selectedCategory={selectedCategory}
+                onSelect={onSelect}
+                level={level + 1}
+              />
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 function ProductsContent() {
   const searchParams = useSearchParams();
@@ -233,25 +290,12 @@ function ProductsContent() {
                   >
                     All Products
                   </button>
-                  {categories.map((cat) => (
-                    <div key={cat.id}>
-                      <button
-                        onClick={() => setSelectedCategory(cat.id)}
-                        className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors duration-200 ${
-                          selectedCategory === cat.id
-                            ? 'bg-primary/10 font-medium text-primary'
-                            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                        }`}
-                      >
-                        <span className="truncate">
-                          {cat.nameEn || cat.name}
-                        </span>
-                        {cat.children && cat.children.length > 0 && (
-                          <ChevronRight className="h-3 w-3 shrink-0" />
-                        )}
-                      </button>
-                    </div>
-                  ))}
+                  {/* Updated: 2026-03-19T10:24:20 - 侧栏展示一级/二级类目树，支持按任意层级筛选 */}
+                  <CategoryTreeButtons
+                    nodes={categories}
+                    selectedCategory={selectedCategory}
+                    onSelect={(categoryId) => setSelectedCategory(categoryId)}
+                  />
                 </nav>
               )}
             </CardContent>
@@ -352,19 +396,21 @@ function ProductCardGrid({
   isAuthenticated: boolean;
 }) {
   const price = product.skus?.[0]?.wholesalePrice;
-  const mainImage = product.images?.[0];
+  // Updated: 2026-03-19T01:13:35 - 商品图统一走后端代理，规避移动端外链不可达
+  const mainImage = toImageProxyUrl(product.images?.[0], 'list');
 
   return (
     <Link href={`/products/${product.id}`}>
-      <Card className="group h-full overflow-hidden transition-all duration-200 hover:border-primary/30 hover:shadow-md">
-        <div className="aspect-square bg-muted">
+      <Card className="group flex h-full flex-col overflow-hidden transition-all duration-200 hover:border-primary/30 hover:shadow-md">
+        {/* Updated: 2026-03-18T23:59:30 - 统一图片可视区域，避免卡片文案错位 */}
+        <div className="relative aspect-square bg-muted">
           {mainImage ? (
             <Image
               src={mainImage}
               alt={product.nameEn || product.name}
-              width={400}
-              height={400}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              fill
+              sizes="(max-width: 1024px) 50vw, 33vw"
+              className="h-full w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
               unoptimized
             />
           ) : (
@@ -373,16 +419,16 @@ function ProductCardGrid({
             </div>
           )}
         </div>
-        <CardContent className="p-4">
+        <CardContent className="flex flex-1 flex-col p-4">
           {product.brandName && (
             <Badge variant="secondary" className="mb-2 text-xs">
               {product.brandName}
             </Badge>
           )}
-          <h3 className="line-clamp-2 text-sm font-medium text-foreground">
+          <h3 className="min-h-[2.75rem] line-clamp-2 text-sm font-medium text-foreground">
             {product.nameEn || product.name}
           </h3>
-          <div className="mt-3">
+          <div className="mt-auto pt-3">
             {isAuthenticated && price ? (
               <p className="text-lg font-semibold text-primary">
                 &euro;{Number(price).toFixed(2)}
@@ -409,7 +455,8 @@ function ProductCardList({
   isAuthenticated: boolean;
 }) {
   const price = product.skus?.[0]?.wholesalePrice;
-  const mainImage = product.images?.[0];
+  // Updated: 2026-03-19T01:13:35 - 商品图统一走后端代理，规避移动端外链不可达
+  const mainImage = toImageProxyUrl(product.images?.[0], 'list');
 
   return (
     <Link href={`/products/${product.id}`}>

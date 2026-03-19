@@ -7,6 +7,7 @@ import api from '@/lib/api';
 type CategoryNode = {
   id: string;
   name: string;
+  productCount?: number;
   children?: CategoryNode[];
 };
 
@@ -53,22 +54,41 @@ export default function CategoriesPage() {
         <ul className="space-y-3 list-none p-0 m-0" role="list">
           {categories.map((c) => (
             <li key={c.id}>
-              <a
-                href={`/categories/${c.id}`}
-                className="block rounded-md border border-border bg-card px-3 py-2 text-foreground font-medium transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer"
-              >
-                {c.name}
-              </a>
+              {/* Updated: 2026-03-19T10:47:40 - 默认弱化 0 商品类目并禁用点击，减少误入空页 */}
+              {(c.productCount ?? 0) > 0 ? (
+                <a
+                  href={`/categories/${c.id}`}
+                  className="block rounded-md border border-border bg-card px-3 py-2 text-foreground font-medium transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer"
+                >
+                  {c.name} ({c.productCount ?? 0})
+                </a>
+              ) : (
+                <span
+                  aria-disabled="true"
+                  className="block rounded-md border border-border/70 bg-card px-3 py-2 text-muted-foreground/60 font-medium cursor-not-allowed select-none"
+                >
+                  {c.name} ({c.productCount ?? 0})
+                </span>
+              )}
               {c.children && c.children.length > 0 && (
                 <ul className="mt-2 ml-4 space-y-1 list-none p-0" role="list">
                   {c.children.map((sc) => (
                     <li key={sc.id}>
-                      <a
-                        href={`/categories/${sc.id}`}
-                        className="block rounded px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer"
-                      >
-                        {sc.name}
-                      </a>
+                      {(sc.productCount ?? 0) > 0 ? (
+                        <a
+                          href={`/categories/${sc.id}`}
+                          className="block rounded px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer"
+                        >
+                          {sc.name} ({sc.productCount ?? 0})
+                        </a>
+                      ) : (
+                        <span
+                          aria-disabled="true"
+                          className="block rounded px-2 py-1 text-sm text-muted-foreground/55 cursor-not-allowed select-none"
+                        >
+                          {sc.name} ({sc.productCount ?? 0})
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>

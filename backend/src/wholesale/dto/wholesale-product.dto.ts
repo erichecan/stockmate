@@ -19,6 +19,10 @@ export class PublicProductListItemDto {
 
   @ApiProperty({ required: false })
   brandName?: string | null;
+
+  // Updated: 2026-03-19T10:35:20 - 返回 categoryId，支持详情页请求同类目关联商品
+  @ApiProperty({ required: false })
+  categoryId?: string | null;
 }
 
 export class PublicProductDetailDto extends PublicProductListItemDto {
@@ -27,6 +31,10 @@ export class PublicProductDetailDto extends PublicProductListItemDto {
 
   @ApiProperty({ required: false })
   descriptionEn?: string | null;
+
+  // Updated: 2026-03-19T10:35:20 - 详情页补充同类目关联商品
+  @ApiProperty({ required: false, type: [PublicProductListItemDto] })
+  relatedItems?: PublicProductListItemDto[];
 }
 
 export type StockStatus = 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
@@ -62,4 +70,8 @@ export class WholesaleProductDetailDto extends WholesaleProductListItemDto {
 
   @ApiProperty({ required: false })
   descriptionEn?: string | null;
+
+  // Updated: 2026-03-19T10:35:20 - 详情页补充同类目关联商品
+  @ApiProperty({ required: false, type: [PublicProductListItemDto] })
+  relatedItems?: PublicProductListItemDto[];
 }

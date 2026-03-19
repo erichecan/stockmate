@@ -25,6 +25,7 @@ import {
 
 import { useAuthStore } from '@/lib/auth-store';
 import api from '@/lib/api';
+import { toImageProxyUrl } from '@/lib/image-proxy';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -101,7 +102,15 @@ export default function HomePage() {
           api.get('/public/products', { params: { tenantSlug } }),
         ]);
         setCategories(catRes.data || []);
-        setProducts(prodRes.data || []);
+        // Updated: 2026-03-19T10:24:35 - 兼容分页响应结构，首页推荐商品使用 data 字段
+        const productPayload = prodRes.data;
+        if (Array.isArray(productPayload)) {
+          setProducts(productPayload);
+        } else if (Array.isArray(productPayload?.data)) {
+          setProducts(productPayload.data);
+        } else {
+          setProducts([]);
+        }
       } catch {
         // Silent fallback
       } finally {
@@ -435,7 +444,9 @@ function AuthenticatedHome({
                   <div className="aspect-square bg-muted">
                     {p.mainImage ? (
                       <Image
-                        src={p.mainImage}
+                        src={
+                          toImageProxyUrl(p.mainImage, 'list') || p.mainImage
+                        }
                         alt={p.nameEn || p.name}
                         width={300}
                         height={300}
@@ -652,7 +663,9 @@ function GuestHome({
                     <div className="aspect-square bg-muted">
                       {p.mainImage ? (
                         <Image
-                          src={p.mainImage}
+                          src={
+                            toImageProxyUrl(p.mainImage, 'list') || p.mainImage
+                          }
                           alt={p.nameEn || p.name}
                           width={300}
                           height={300}

@@ -22,7 +22,9 @@
     "seed:sales": "tsx prisma/seed-sales.ts",
     "seed:mobigo": "tsx prisma/seed-mobigo-categories.ts",
     "import:mobigo": "tsx prisma/import-mobigo-products.ts",
-    "inspect:mobigo": "tsx prisma/inspect-mobigo-summary.ts"
+    "backfill:mobigo:desc": "tsx prisma/backfill-mobigo-descriptions.ts",
+    "inspect:mobigo": "tsx prisma/inspect-mobigo-summary.ts",
+    "reassign:mobigo": "tsx prisma/reassign-mobigo-product-categories.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

@@ -1,7 +1,7 @@
 // 2026-03-16T23:22:00 - Product detail page: auth-aware pricing, stock status, add-to-cart
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -15,11 +15,13 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
+  Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAuthStore } from '@/lib/auth-store';
 import api from '@/lib/api';
+import { toImageProxyUrl } from '@/lib/image-proxy';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +47,17 @@ type ProductDetail = {
   images?: string[];
   categoryName?: string | null;
   brandName?: string | null;
+  categoryId?: string | null;
   skus?: Sku[];
+  // Updated: 2026-03-19T10:38:20 - 详情接口返回同类目关联商品
+  relatedItems?: Array<{
+    id: string;
+    name: string;
+    nameEn?: string | null;
+    images?: string[];
+    categoryName?: string | null;
+    brandName?: string | null;
+  }>;
 };
 
 const STOCK_STATUS = {
@@ -66,6 +78,18 @@ const STOCK_STATUS = {
   },
 };
 
+function resolveStockStatusKey(status: unknown): keyof typeof STOCK_STATUS {
+  // Updated: 2026-03-19T10:38:40 - 保护 stockStatus 解析，避免 any 断言
+  switch (status) {
+    case 'IN_STOCK':
+    case 'LOW_STOCK':
+    case 'OUT_OF_STOCK':
+      return status;
+    default:
+      return 'IN_STOCK';
+  }
+}
+
 export default function ProductDetailPage() {
   const params = useParams();
   const productId = params.id as string;
@@ -73,6 +97,9 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedSku, setSelectedSku] = useState<Sku | null>(null);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [zoomActive, setZoomActive] = useState(false);
+  const [zoomPosition, setZoomPosition] = useState({ x: 50, y: 50 });
   const [quantity, setQuantity] = useState(1);
   const [addingToCart, setAddingToCart] = useState(false);
 
@@ -109,6 +136,12 @@ export default function ProductDetailPage() {
     load();
   }, [productId, isAuthenticated]);
 
+  useEffect(() => {
+    // Updated: 2026-03-19T10:38:20 - 切换商品后重置图片索引与放大镜状态
+    setSelectedImageIndex(0);
+    setZoomActive(false);
+  }, [product?.id]);
+
   const handleAddToCart = async () => {
     if (!selectedSku || !isAuthenticated) return;
     setAddingToCart(true);
@@ -125,6 +158,32 @@ export default function ProductDetailPage() {
       setAddingToCart(false);
     }
   };
+
+  // Updated: 2026-03-19T10:50:10 - Hook 固定在所有条件返回之前，避免 Hook 顺序变化
+  const rawImageList = useMemo(
+    () => ((product?.images || []) as string[]).filter(Boolean),
+    [product?.images],
+  );
+  const imageList = useMemo(
+    () =>
+      rawImageList
+        .map((img) => toImageProxyUrl(img, 'detail'))
+        .filter((img): img is string => Boolean(img)),
+    [rawImageList],
+  );
+  const thumbnailImageList = useMemo(
+    () =>
+      rawImageList
+        .map((img) => toImageProxyUrl(img, 'list'))
+        .filter((img): img is string => Boolean(img)),
+    [rawImageList],
+  );
+  const selectedImage = imageList[selectedImageIndex];
+  const selectedZoomImage = useMemo(() => {
+    const raw = rawImageList[selectedImageIndex];
+    return toImageProxyUrl(raw, 'zoom');
+  }, [rawImageList, selectedImageIndex]);
+  const relatedItems = product?.relatedItems || [];
 
   if (loading) {
     return (
@@ -159,8 +218,7 @@ export default function ProductDetailPage() {
   }
 
   // Updated: 2026-03-16T23:50:00 - P0 闭环: 使用认证 API 返回的真实库存状态
-  const stockKey: keyof typeof STOCK_STATUS =
-    ((selectedSku as any)?.stockStatus as keyof typeof STOCK_STATUS) || 'IN_STOCK';
+  const stockKey = resolveStockStatusKey(selectedSku?.stockStatus);
   const stockInfo = STOCK_STATUS[stockKey];
   const StockIcon = stockInfo.icon;
 
@@ -189,21 +247,79 @@ export default function ProductDetailPage() {
       </nav>
 
       <div className="grid gap-8 lg:grid-cols-2">
-        {/* Image */}
-        <div className="overflow-hidden rounded-2xl border border-border bg-muted">
-          {product.images && product.images.length > 0 ? (
-            <Image
-              src={product.images[0]}
-              alt={product.nameEn || product.name}
-              width={600}
-              height={600}
-              className="h-full w-full object-cover"
-              unoptimized
-              priority
-            />
-          ) : (
-            <div className="flex aspect-square items-center justify-center">
-              <Package className="h-24 w-24 text-muted-foreground/20" />
+        {/* Image Gallery + Magnifier */}
+        <div className="space-y-3">
+          <div
+            className="relative overflow-hidden rounded-2xl border border-border bg-muted"
+            onMouseEnter={() => setZoomActive(true)}
+            onMouseLeave={() => setZoomActive(false)}
+            onMouseMove={(e) => {
+              // Updated: 2026-03-19T10:38:20 - 鼠标位置驱动放大镜区域
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = ((e.clientX - rect.left) / rect.width) * 100;
+              const y = ((e.clientY - rect.top) / rect.height) * 100;
+              setZoomPosition({
+                x: Math.max(0, Math.min(100, x)),
+                y: Math.max(0, Math.min(100, y)),
+              });
+            }}
+          >
+            {selectedImage ? (
+              <>
+                <Image
+                  src={selectedImage}
+                  alt={product.nameEn || product.name}
+                  width={600}
+                  height={600}
+                  className="h-full w-full object-cover"
+                  unoptimized
+                  priority
+                />
+                {zoomActive && (
+                  <div
+                    className="pointer-events-none absolute inset-0 hidden lg:block"
+                    style={{
+                      backgroundImage: `url(${selectedZoomImage || selectedImage})`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundSize: '220%',
+                      backgroundPosition: `${zoomPosition.x}% ${zoomPosition.y}%`,
+                    }}
+                  />
+                )}
+                <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/50 p-1.5 text-white">
+                  <Search className="h-4 w-4" />
+                </div>
+              </>
+            ) : (
+              <div className="flex aspect-square items-center justify-center">
+                <Package className="h-24 w-24 text-muted-foreground/20" />
+              </div>
+            )}
+          </div>
+          {imageList.length > 1 && (
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+              {thumbnailImageList.map((imageUrl, index) => (
+                <button
+                  key={`${imageUrl}-${index}`}
+                  type="button"
+                  onClick={() => setSelectedImageIndex(index)}
+                  className={`overflow-hidden rounded-lg border ${
+                    selectedImageIndex === index
+                      ? 'border-primary ring-2 ring-primary/20'
+                      : 'border-border'
+                  }`}
+                  aria-label={`切换到第 ${index + 1} 张商品图`}
+                >
+                  <Image
+                    src={imageUrl}
+                    alt={`${product.nameEn || product.name} thumbnail ${index + 1}`}
+                    width={120}
+                    height={120}
+                    className="aspect-square h-full w-full object-cover"
+                    unoptimized
+                  />
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -375,13 +491,59 @@ export default function ProductDetailPage() {
               <h2 className="mb-2 text-sm font-semibold text-foreground">
                 Description
               </h2>
-              <p className="text-sm leading-relaxed text-muted-foreground">
+              <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
                 {product.descriptionEn || product.description}
               </p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Related Items */}
+      {relatedItems.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-4 text-lg font-semibold text-foreground">
+            Related Items
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {relatedItems.map((item) => {
+              const itemImage = toImageProxyUrl(item.images?.[0], 'list');
+              return (
+                <Link
+                  key={item.id}
+                  href={`/products/${item.id}`}
+                  className="group rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/40"
+                >
+                  <div className="mb-2 overflow-hidden rounded-lg bg-muted">
+                    {itemImage ? (
+                      <Image
+                        src={itemImage}
+                        alt={item.nameEn || item.name}
+                        width={240}
+                        height={240}
+                        className="aspect-square h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="flex aspect-square items-center justify-center">
+                        <Package className="h-10 w-10 text-muted-foreground/30" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="line-clamp-2 text-sm font-medium text-foreground">
+                    {item.nameEn || item.name}
+                  </div>
+                  {item.brandName && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {item.brandName}
+                    </div>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
