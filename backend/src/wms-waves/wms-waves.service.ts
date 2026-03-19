@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PickWaveStatus, Prisma, SOStatus } from '@prisma/client';
+import { PickWaveStatus, Prisma, SOStatus, UserRole } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWaveDto } from './dto/create-wave.dto';
 
@@ -17,7 +18,49 @@ const WAVE_ELIGIBLE_ORDER_STATUS: SOStatus[] = [
 
 @Injectable()
 export class WmsWavesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
+
+  // Updated: 2026-03-19T11:40:10 - 通知仓库/运营/管理角色，保证批发与仓库作业状态联动
+  private async notifyWaveRoles(
+    tenantId: string,
+    input: {
+      type: string;
+      title: string;
+      body: string;
+      payload: Record<string, unknown>;
+      roles?: UserRole[];
+    },
+  ) {
+    const roles = input.roles ?? [
+      UserRole.ADMIN,
+      UserRole.OPERATIONS,
+      UserRole.WAREHOUSE,
+    ];
+    const targets = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        role: { in: roles },
+      },
+      select: { id: true },
+    });
+    if (!targets.length) return;
+    await Promise.all(
+      targets.map((user) =>
+        this.notificationsService.createEvent({
+          tenantId,
+          type: input.type,
+          title: input.title,
+          body: input.body,
+          payload: input.payload,
+          targetUserId: user.id,
+        }),
+      ),
+    );
+  }
 
   // Updated: 2026-03-18T23:26:10 - 生成波次号
   private async generateWaveNumber(tenantId: string) {
@@ -75,9 +118,8 @@ export class WmsWavesService {
     }
     const warehouseId = dto.warehouseId || warehouseIds[0];
     const waveNumber = await this.generateWaveNumber(tenantId);
-
-    const wave = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.pickWave.create({
+    const createWaveWithClient = async (db: PrismaService) => {
+      const created = await db.pickWave.create({
         data: {
           tenantId,
           waveNumber,
@@ -92,7 +134,7 @@ export class WmsWavesService {
         for (const item of order.items) {
           let remain = item.quantity;
 
-          const invItems = await tx.inventoryItem.findMany({
+          const invItems = await db.inventoryItem.findMany({
             where: {
               tenantId,
               warehouseId,
@@ -108,7 +150,7 @@ export class WmsWavesService {
             if (available <= 0) continue;
             const take = Math.min(remain, available);
             remain -= take;
-            await tx.pickWaveItem.create({
+            await db.pickWaveItem.create({
               data: {
                 pickWaveId: created.id,
                 salesOrderId: order.id,
@@ -121,7 +163,7 @@ export class WmsWavesService {
 
           if (remain > 0) {
             // 缺货部分仍记录进波次，方便作业看板识别
-            await tx.pickWaveItem.create({
+            await db.pickWaveItem.create({
               data: {
                 pickWaveId: created.id,
                 salesOrderId: order.id,
@@ -135,6 +177,36 @@ export class WmsWavesService {
       }
 
       return created;
+    };
+
+    let wave;
+    try {
+      wave = await this.prisma.$transaction(async (tx) => {
+        return createWaveWithClient(tx as unknown as PrismaService);
+      });
+    } catch (error: unknown) {
+      // Updated: 2026-03-19T11:19:05 - Neon WebSocket 事务偶发失败时回退非事务创建，避免波次功能不可用
+      const message = error instanceof Error ? error.message : String(error);
+      const isNeonTransactionError =
+        /websocket|starttransaction|all attempts to open a websocket/i.test(
+          message,
+        );
+      if (!isNeonTransactionError) {
+        throw error;
+      }
+      wave = await createWaveWithClient(this.prisma);
+    }
+
+    await this.notifyWaveRoles(tenantId, {
+      type: 'WAVE_CREATED',
+      title: `新波次已创建：${wave.waveNumber}`,
+      body: `波次 ${wave.waveNumber} 已创建，包含 ${wave.totalOrders} 张订单，请仓库开始拣货作业。`,
+      payload: {
+        waveId: wave.id,
+        waveNumber: wave.waveNumber,
+        status: wave.status,
+        totalOrders: wave.totalOrders,
+      },
     });
 
     return this.getWaveById(tenantId, wave.id);
@@ -192,8 +264,8 @@ export class WmsWavesService {
 
   // Updated: 2026-03-18T23:28:10 - 波次状态流转
   async updateWaveStatus(tenantId: string, id: string, status: PickWaveStatus) {
-    await this.getWaveById(tenantId, id);
-    return this.prisma.pickWave.update({
+    const existing = await this.getWaveById(tenantId, id);
+    const updated = await this.prisma.pickWave.update({
       where: { id },
       data: {
         status,
@@ -201,6 +273,18 @@ export class WmsWavesService {
         completedAt: status === PickWaveStatus.COMPLETED ? new Date() : undefined,
       },
     });
+    await this.notifyWaveRoles(tenantId, {
+      type: 'WAVE_STATUS_UPDATED',
+      title: `波次状态更新：${updated.waveNumber}`,
+      body: `波次 ${updated.waveNumber} 状态由 ${existing.status} 更新为 ${updated.status}。`,
+      payload: {
+        waveId: updated.id,
+        waveNumber: updated.waveNumber,
+        previousStatus: existing.status,
+        currentStatus: updated.status,
+      },
+    });
+    return updated;
   }
 
   // Updated: 2026-03-18T23:28:40 - 生成波次拣货打印数据（按库位排序、SKU 合并）
@@ -223,26 +307,31 @@ export class WmsWavesService {
         skuCode: string;
         skuName: string;
         totalQty: number;
+        shortage: boolean;
         orderBreakdown: Array<{ orderId: string; qty: number }>;
       }
     >();
 
     for (const item of wave.items) {
       const sku = skuMap.get(item.skuId);
-      const binCode = item.binLocation?.code || '缺货';
+      // Updated: 2026-03-19T11:22:06 - Bin 仅显示库位，缺货语义交由 shortage/Qty 展示
+      const binCode = item.binLocation?.code || '-';
       const skuCode = sku?.code || item.skuId;
       const skuName = sku?.product?.name || sku?.code || item.skuId;
+      const shortage = !item.binLocationId;
       const key = `${binCode}::${skuCode}`;
       const old = merged.get(key);
       if (old) {
         old.totalQty += item.requiredQty;
         old.orderBreakdown.push({ orderId: item.salesOrderId, qty: item.requiredQty });
+        old.shortage = old.shortage || shortage;
       } else {
         merged.set(key, {
           binCode,
           skuCode,
           skuName,
           totalQty: item.requiredQty,
+          shortage,
           orderBreakdown: [{ orderId: item.salesOrderId, qty: item.requiredQty }],
         });
       }

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   ClipboardList,
   Layers,
+  Warehouse,
   Truck,
   Bell,
   Banknote,
@@ -23,6 +24,8 @@ const ADMIN_NAV = [
   { href: '/admin/preorder-limits', label: 'Preorder Limit', icon: ShieldAlert },
   { href: '/admin/orders', label: 'Orders', icon: ClipboardList },
   { href: '/admin/waves', label: 'Waves', icon: Layers },
+  // Updated: 2026-03-19T11:42:00 - 仓库专用波次看板入口
+  { href: '/admin/warehouse-waves', label: 'Warehouse Waves', icon: Warehouse },
   { href: '/admin/shipments', label: 'Shipments', icon: Truck },
   { href: '/admin/notifications', label: 'Notifications', icon: Bell },
   { href: '/admin/cash', label: 'Cash', icon: Banknote },
