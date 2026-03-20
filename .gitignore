@@ -27,13 +27,11 @@ out/
 coverage/
 frontend/playwright-report/
 frontend/test-results/
-wholesale-frontend/playwright-report/
-wholesale-frontend/test-results/
-# Updated: 2026-03-19T19:06:00 - 批发站 Playwright 产物不入库
+# Updated: 2026-03-19T19:07:00 - 批发站 Playwright 产物不入库
 wholesale-frontend/playwright-report/
 wholesale-frontend/test-results/
 
-# Updated: 2026-03-19T19:06:00 - Mobigo 爬虫本地会话（勿提交）
+# Updated: 2026-03-19T19:07:00 - Mobigo 爬虫本地会话（勿提交）
 mobigo/cookies/*.json
 
 # Logs
