@@ -1,7 +1,8 @@
 // 2026-03-17T12:38:00 - B2B header: add Admin nav link
+// 2026-03-20T16:45:00 - 零售商采购角色隐藏 Admin/Demo，专注采购动线
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/auth-store';
+import { isRetailProcurementRole } from '@/lib/wholesale-roles';
 import { Button } from '@/components/ui/button';
 
 const NAV_ITEMS = [
@@ -58,6 +60,15 @@ export function SiteHeader() {
   const visibleNav = NAV_ITEMS.filter(
     (item) => !item.authRequired || isAuthenticated
   );
+
+  const quickNavFiltered = useMemo(() => {
+    if (isRetailProcurementRole(user?.role)) {
+      return QUICK_NAV.filter(
+        (item) => item.href !== '/admin' && item.href !== '/demo',
+      );
+    }
+    return QUICK_NAV;
+  }, [user?.role]);
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur-sm">
@@ -108,7 +119,7 @@ export function SiteHeader() {
           {isAuthenticated && (
             <>
               <div className="mx-1 h-5 w-px bg-border" />
-              {QUICK_NAV.map((item) => {
+              {quickNavFiltered.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname.startsWith(item.href);
                 return (
@@ -222,7 +233,7 @@ export function SiteHeader() {
                   <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Quick Actions
                   </p>
-                  {QUICK_NAV.map((item) => {
+                  {quickNavFiltered.map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname.startsWith(item.href);
                     return (

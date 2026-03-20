@@ -22,12 +22,30 @@ import { Card, CardContent } from '@/components/ui/card';
 
 const LAST_TENANT_KEY = 'lastTenantSlug';
 
-// Updated: 2026-03-17T00:10:00 - P0 闭环: 使用真实测试账号
-const TEST_ACCOUNT = {
-  email: 'admin@test.com',
-  password: 'Test1234!',
-  tenantSlug: 'test-company',
-};
+// Updated: 2026-03-20T15:48:00 - 多角色 Demo（已去掉与老板重复的经理视角）对应 seed-demo-users.ts
+// Updated: 2026-03-20T16:45:00 - 零售商采购 RETAIL_BUYER、网站管理 CATALOG_ADMIN（PRD A/B 端）
+const DEMO_ACCOUNTS = [
+  { key: 'boss', label: '老板视角', email: 'boss.demo@test.com', role: 'ADMIN' },
+  { key: 'warehouse-supervisor', label: '仓库主管视角', email: 'warehouse.supervisor.demo@test.com', role: 'WAREHOUSE' },
+  { key: 'wholesale-supervisor', label: '批发网站主管视角', email: 'wholesale.supervisor.demo@test.com', role: 'SALES_SUPERVISOR' },
+  { key: 'order-processor', label: '订单处理视角', email: 'order.processor.demo@test.com', role: 'SALES' },
+  { key: 'returns-specialist', label: '退货专员视角', email: 'returns.specialist.demo@test.com', role: 'RETURN_SPECIALIST' },
+  { key: 'picker', label: '仓库拣货员视角', email: 'picker.demo@test.com', role: 'PICKER' },
+  {
+    key: 'retail-buyer',
+    label: '零售商采购视角',
+    email: 'retail.buyer.demo@test.com',
+    role: 'RETAIL_BUYER',
+  },
+  {
+    key: 'catalog-admin',
+    label: '网站管理视角',
+    email: 'catalog.admin.demo@test.com',
+    role: 'CATALOG_ADMIN',
+  },
+] as const;
+const DEMO_PASSWORD = 'Demo1234!';
+const DEMO_TENANT = 'test-company';
 const DEMO_ROUTE = '/demo';
 
 export default function LoginPage() {
@@ -40,6 +58,10 @@ export default function LoginPage() {
   const [tenantOptions, setTenantOptions] = useState<
     { slug: string; name: string }[]
   >([]);
+  // Updated: 2026-03-19T15:47:21 - Demo 角色选择器默认选中第一个角色
+  const [selectedDemoEmail, setSelectedDemoEmail] = useState<string>(
+    DEMO_ACCOUNTS[0]?.email ?? '',
+  );
 
   useEffect(() => {
     const saved =
@@ -49,16 +71,19 @@ export default function LoginPage() {
     if (saved) setTenantSlug(saved);
   }, []);
 
-  const fillTestAccount = () => {
-    setEmail(TEST_ACCOUNT.email);
-    setPassword(TEST_ACCOUNT.password);
-    setTenantSlug(TEST_ACCOUNT.tenantSlug);
-    setShowTestHint(false);
+  const fillDemoAccount = (emailValue: string) => {
+    setEmail(emailValue);
+    setPassword(DEMO_PASSWORD);
+    setTenantSlug(DEMO_TENANT);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) {
+  // Updated: 2026-03-19T15:47:21 - 抽离登录请求，支持“表单提交”和“角色一键登录”复用
+  const loginWithCredentials = async (payload: {
+    email: string;
+    password: string;
+    tenantSlug?: string;
+  }) => {
+    if (!payload.email || !payload.password) {
       toast.error('Please enter your email and password');
       return;
     }
@@ -68,9 +93,9 @@ export default function LoginPage() {
       const base =
         process.env.NEXT_PUBLIC_API_BASE_AUTH || 'http://localhost:3001/api';
       const res = await axios.post(`${base}/auth/wholesale/login`, {
-        email,
-        password,
-        tenantSlug: tenantSlug.trim() || undefined,
+        email: payload.email,
+        password: payload.password,
+        tenantSlug: payload.tenantSlug?.trim() || undefined,
       });
       // Updated: 2026-03-17T00:11:00 - P0 闭环: 存储 access + refresh token
       const { accessToken, refreshToken, user } = res.data ?? {};
@@ -79,16 +104,26 @@ export default function LoginPage() {
         if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         if (user?.id) localStorage.setItem('userId', user.id);
         localStorage.setItem('wholesaleUser', JSON.stringify(user ?? '{}'));
-        const slugToSave = tenantSlug.trim() || user?.tenantSlug;
+        const slugToSave = payload.tenantSlug?.trim() || user?.tenantSlug;
         if (slugToSave) localStorage.setItem(LAST_TENANT_KEY, slugToSave);
       }
       toast.success('Login successful');
       // Updated: 2026-03-19T12:06:48 - 演示账号登录后默认进入演示驾驶舱
+      // Updated: 2026-03-20T18:23:20 - 零售商进采购首页；CATALOG_ADMIN 演示账号进商品管理
+      const demoAccount = DEMO_ACCOUNTS.find(
+        (item) => item.email === payload.email.trim().toLowerCase(),
+      );
       const isDemoLogin =
-        email.trim().toLowerCase() === TEST_ACCOUNT.email &&
-        (tenantSlug.trim() || user?.tenantSlug) === TEST_ACCOUNT.tenantSlug;
+        !!demoAccount &&
+        (payload.tenantSlug?.trim() || user?.tenantSlug) === DEMO_TENANT;
+      const demoRoute =
+        demoAccount?.role === 'RETAIL_BUYER'
+          ? '/'
+          :         demoAccount?.role === 'CATALOG_ADMIN'
+            ? '/admin/products'
+            : DEMO_ROUTE;
       setTimeout(() => {
-        window.location.replace(isDemoLogin ? DEMO_ROUTE : '/');
+        window.location.replace(isDemoLogin ? demoRoute : '/');
       }, 0);
     } catch (err: unknown) {
       const res = (
@@ -118,6 +153,25 @@ export default function LoginPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await loginWithCredentials({ email, password, tenantSlug });
+  };
+
+  // Updated: 2026-03-19T15:47:21 - 角色一键登录：选中角色后自动填充并直接登录
+  const handleQuickDemoLogin = async () => {
+    if (!selectedDemoEmail) {
+      toast.error('Please select a demo role');
+      return;
+    }
+    fillDemoAccount(selectedDemoEmail);
+    await loginWithCredentials({
+      email: selectedDemoEmail,
+      password: DEMO_PASSWORD,
+      tenantSlug: DEMO_TENANT,
+    });
   };
 
   return (
@@ -154,25 +208,41 @@ export default function LoginPage() {
             </button>
             {showTestHint && (
               <div className="border-t border-border px-4 pb-4 pt-3 text-xs text-muted-foreground">
-                <p className="mb-2">
-                  Email:{' '}
-                  <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-foreground">
-                    {TEST_ACCOUNT.email}
-                  </kbd>{' '}
+                <p className="mb-2 text-[11px] leading-5">
+                  Tenant: <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-foreground">{DEMO_TENANT}</kbd>{' '}
                   Password:{' '}
-                  <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-foreground">
-                    {TEST_ACCOUNT.password}
-                  </kbd>
+                  <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-foreground">{DEMO_PASSWORD}</kbd>
                 </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={fillTestAccount}
-                >
-                  Auto-fill
-                </Button>
+                <div className="grid gap-2">
+                  <select
+                    value={selectedDemoEmail}
+                    onChange={(e) => {
+                      setSelectedDemoEmail(e.target.value);
+                      fillDemoAccount(e.target.value);
+                    }}
+                    // Updated: 2026-03-20T10:27:35 - 修复下拉框被长文本撑出容器的问题
+                    className="h-9 w-full min-w-0 rounded border border-input bg-background px-2 text-[12px] text-foreground"
+                  >
+                    {DEMO_ACCOUNTS.map((item) => (
+                      <option key={item.key} value={item.email}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted-foreground">
+                    当前账号：{selectedDemoEmail}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    className="h-8 text-[12px]"
+                    onClick={handleQuickDemoLogin}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? '登录中...' : '所选角色一键登录'}
+                  </Button>
+                </div>
               </div>
             )}
           </div>

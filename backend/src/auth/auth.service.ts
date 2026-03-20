@@ -28,6 +28,26 @@ export class AuthService {
     private customersService: CustomersService,
   ) {}
 
+  /**
+   * 2026-03-19T12:00:00 - 批发站后台员工若 DB 有 customerId，旧逻辑会误发 WHOLESALE JWT，导致后台 API 与 Guards 行为异常；仅 VIEWER+B2B 客户走 WHOLESALE。
+   * 2026-03-20T16:35:00 - RETAIL_BUYER 与 VIEWER 同属「零售商批发前台」身份。
+   */
+  private isWholesaleRetailCustomerRole(role: UserRole): boolean {
+    return role === UserRole.VIEWER || role === UserRole.RETAIL_BUYER;
+  }
+
+  private resolveJwtAudience(
+    role: UserRole,
+    explicit: 'BACKOFFICE' | 'WHOLESALE' | undefined,
+    customerId: string | null | undefined,
+  ): 'BACKOFFICE' | 'WHOLESALE' {
+    if (explicit) return explicit;
+    if (this.isWholesaleRetailCustomerRole(role) && customerId) {
+      return 'WHOLESALE';
+    }
+    return 'BACKOFFICE';
+  }
+
   private mapLoginUserInput(user: {
     id: string;
     email: string;
@@ -44,9 +64,11 @@ export class AuthService {
       tenantId: user.tenantId,
       customerId: user.customerId ?? undefined,
       customerTier: user.customerTier ?? undefined,
-      audience:
-        user.audience ??
-        (user.customerId ? ('WHOLESALE' as const) : ('BACKOFFICE' as const)),
+      audience: this.resolveJwtAudience(
+        user.role,
+        user.audience,
+        user.customerId ?? null,
+      ),
     };
   }
 
@@ -135,9 +157,11 @@ export class AuthService {
       role: user.role,
       customerId: user.customerId,
       customerTier: user.customerTier,
-      audience:
-        user.audience ??
-        (user.customerId ? ('WHOLESALE' as const) : ('BACKOFFICE' as const)),
+      audience: this.resolveJwtAudience(
+        user.role as UserRole,
+        user.audience,
+        user.customerId ?? null,
+      ),
     };
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -292,6 +316,24 @@ export class AuthService {
       dto.password,
       dto.tenantSlug?.trim(),
     );
+
+    // 2026-03-19T12:00:00 - 后台岗位（非 VIEWER）走 wholesale 登录入口时也应签发 BACKOFFICE，避免强制绑定客户与 WHOLESALE 导致 /api/auth/profile、/api/skus 等鉴权异常
+    // 2026-03-20T16:35:00 - 零售商采购账号 RETAIL_BUYER 与 VIEWER 同属批发客户 JWT 规则
+    if (!this.isWholesaleRetailCustomerRole(user.role)) {
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { customerId: true, customer: { select: { tier: true } } },
+      });
+      return this.login({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        tenantId: user.tenantId,
+        customerId: dbUser?.customerId ?? undefined,
+        customerTier: dbUser?.customer?.tier ?? undefined,
+        audience: 'BACKOFFICE',
+      });
+    }
 
     // 2026-03-15 若无绑定客户则先按邮箱查找；若仍无则自动创建默认客户，便于测试账号 admin@test.com 登录批发站
     let customerId: string | undefined = (user as any).customerId ?? undefined;

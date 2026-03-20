@@ -1,0 +1,2 @@
+-- Updated: 2026-03-20T11:31:10 - PaymentMethod 枚举新增 DEBIT_CARD
+ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'DEBIT_CARD';

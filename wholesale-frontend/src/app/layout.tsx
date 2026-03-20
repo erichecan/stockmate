@@ -38,7 +38,8 @@ export default function RootLayout({
           <div className="flex min-h-screen flex-col">
             <SiteHeader />
 
-            <main className="flex-1" id="main-content">
+            {/* 2026-03-20T19:35:22 - min-w-0：嵌套 admin 双栏 flex 时允许子区正确收缩与横向滚动 */}
+            <main className="min-w-0 flex-1" id="main-content">
               {children}
             </main>
 

@@ -3,6 +3,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export interface JwtPayload {
@@ -46,9 +47,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       tenant: user.tenant,
       customerId: user.customer?.id ?? payload.customerId,
       customerTier: user.customer?.tier ?? payload.customerTier,
+      // 2026-03-19T12:00:00 - 与 AuthService.resolveJwtAudience 一致：仅 VIEWER+B2B 客户为 WHOLESALE，避免后台员工带 customerId 被误判
+      // 2026-03-20T16:35:00 - RETAIL_BUYER 同 VIEWER
       audience:
         payload.audience ??
-        (user.customerId ? ('WHOLESALE' as const) : ('BACKOFFICE' as const)),
+        ((user.role === UserRole.VIEWER || user.role === UserRole.RETAIL_BUYER) &&
+        user.customerId
+          ? ('WHOLESALE' as const)
+          : ('BACKOFFICE' as const)),
     };
   }
 }

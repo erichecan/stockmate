@@ -1,5 +1,5 @@
 // Updated: 2026-03-17T12:00:00 - 后端第三部分：现金账 API
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -7,15 +7,26 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { CashbookService } from './cashbook.service';
 import { OpenSessionDto } from './dto/open-session.dto';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { CloseSessionDto } from './dto/close-session.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
 
 @ApiTags('Cashbook')
 @ApiBearerAuth()
 @Controller('cashbook')
+@UseGuards(RolesGuard)
+@Roles(
+  UserRole.SUPER_ADMIN,
+  UserRole.ADMIN,
+  UserRole.OPERATIONS,
+  UserRole.SALES_SUPERVISOR,
+  UserRole.FINANCE,
+)
 export class CashbookController {
   constructor(private cashbookService: CashbookService) {}
 

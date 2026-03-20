@@ -27,6 +27,13 @@ out/
 coverage/
 frontend/playwright-report/
 frontend/test-results/
+wholesale-frontend/playwright-report/
+wholesale-frontend/test-results/
+wholesale-frontend/playwright-report/
+wholesale-frontend/test-results/
+
+# Mobigo 爬虫本地会话（勿提交）
+mobigo/cookies/*.json
 
 # Logs
 *.log
@@ -43,3 +50,6 @@ backend_url.txt
 
 # Misc
 *.tsbuildinfo
+
+# Mobigo crawl session (勿提交 Cookie)
+mobigo/cookies/

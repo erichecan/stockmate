@@ -1,4 +1,5 @@
 // 2026-03-17T00:25:00 - B2B 极简采购大盘: command-center style dashboard for instant ordering
+// 2026-03-20T16:45:00 - 零售商角色（VIEWER/RETAIL_BUYER）强化中文「专业采购台」文案
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -24,6 +25,7 @@ import {
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/auth-store';
+import { isRetailProcurementRole } from '@/lib/wholesale-roles';
 import api from '@/lib/api';
 import { toImageProxyUrl } from '@/lib/image-proxy';
 import { Button } from '@/components/ui/button';
@@ -50,7 +52,9 @@ const QUICK_ACTIONS = [
   {
     key: 'reorder',
     label: 'Quick Reorder',
+    zhLabel: '再来一单',
     desc: 'Repeat your last purchase with one click',
+    zhDesc: '一键复购上次清单，改数量即下单',
     icon: RefreshCw,
     href: '/quick-reorder',
     color: 'text-blue-600 bg-blue-50',
@@ -58,7 +62,9 @@ const QUICK_ACTIONS = [
   {
     key: 'bulk',
     label: 'Bulk Order',
+    zhLabel: '批量下单',
     desc: 'Enter SKUs in a spreadsheet-style matrix',
+    zhDesc: '表格式录入 SKU + 数量，熟客补货最快',
     icon: LayoutGrid,
     href: '/bulk-order',
     color: 'text-emerald-600 bg-emerald-50',
@@ -66,7 +72,9 @@ const QUICK_ACTIONS = [
   {
     key: 'deals',
     label: 'Special Deals',
+    zhLabel: '特价 / 清仓',
     desc: 'Clearance and special price items',
+    zhDesc: '高周转与清仓品集中选购',
     icon: Tag,
     href: '/deals',
     color: 'text-amber-600 bg-amber-50',
@@ -74,7 +82,9 @@ const QUICK_ACTIONS = [
   {
     key: 'preorder',
     label: 'Pre-Order',
+    zhLabel: '预售 / 期货',
     desc: 'Reserve items from incoming shipments',
+    zhDesc: '到港前锁货，按规则付定/尾款',
     icon: Ship,
     href: '/preorder',
     color: 'text-violet-600 bg-violet-50',
@@ -167,6 +177,7 @@ function AuthenticatedHome({
   const creditUsed = 1500;
   const creditLimit = 20000;
   const creditPercent = Math.round((creditUsed / creditLimit) * 100);
+  const retailZh = isRetailProcurementRole(user?.role);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -174,10 +185,18 @@ function AuthenticatedHome({
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-            {user?.firstName ? `${user.firstName}, ready to order` : 'Purchasing Dashboard'}
+            {retailZh
+              ? user?.firstName
+                ? `${user.firstName}，专业采购台`
+                : '专业采购台'
+              : user?.firstName
+                ? `${user.firstName}, ready to order`
+                : 'Purchasing Dashboard'}
           </h1>
           <p className="text-sm text-muted-foreground">
-            See it · Click it · Done — your 30-second ordering hub
+            {retailZh
+              ? '快 · 准 · 省时间 — 面向零售商的一站式下单入口'
+              : 'See it · Click it · Done — your 30-second ordering hub'}
           </p>
         </div>
         <form
@@ -271,12 +290,14 @@ function AuthenticatedHome({
         <div className="mb-3 flex items-center gap-2">
           <Zap className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Quick Actions
+            {retailZh ? '核心采购入口' : 'Quick Actions'}
           </h2>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {QUICK_ACTIONS.map((action) => {
             const Icon = action.icon;
+            const label = retailZh ? action.zhLabel : action.label;
+            const desc = retailZh ? action.zhDesc : action.desc;
             return (
               <Link key={action.key} href={action.href}>
                 <Card className="group relative h-full cursor-pointer overflow-hidden border-2 border-transparent transition-all duration-200 hover:border-primary hover:shadow-lg">
@@ -288,10 +309,10 @@ function AuthenticatedHome({
                     </div>
                     <div>
                       <h3 className="text-base font-bold text-foreground">
-                        {action.label}
+                        {label}
                       </h3>
                       <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                        {action.desc}
+                        {desc}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-opacity duration-200 group-hover:opacity-100">

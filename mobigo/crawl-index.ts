@@ -1,142 +1,217 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { chromium, type BrowserContext, type Cookie } from 'playwright';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import querystring from 'node:querystring';
 
 const BASE_URL = 'https://www.mobigo.ie';
-const COOKIES_PATH = path.join(__dirname, 'cookies', 'mobigo.json');
 const OUTPUT_DIR = path.join(__dirname, 'data');
 const OUTPUT_PATH = path.join(OUTPUT_DIR, 'product-urls.json');
+const PRODUCT_CATEGORY_PATHS_OUTPUT_PATH = path.join(OUTPUT_DIR, 'product-category-paths.json');
+const USER_AGENT =
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36 mobigo-index-crawler';
 
-// 从已保存的登录 Cookie 恢复会话
-async function createContextWithCookies(): Promise<BrowserContext> {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
+type CategoryTarget = {
+  url: string;
+  path: string[];
+};
 
-  if (fs.existsSync(COOKIES_PATH)) {
-    const raw = fs.readFileSync(COOKIES_PATH, 'utf-8');
-    const cookies: Cookie[] = JSON.parse(raw);
-    if (cookies.length) {
-      await context.addCookies(cookies);
-    }
-  } else {
-    console.warn('⚠️ 未找到 cookies/mobigo.json，请先运行 pnpm run login');
-  }
-
-  return context;
+function normalizeCategoryLabel(raw: string): string {
+  // Updated: 2026-03-19T23:06:40 - 统一导航文案格式，保证类目层级匹配稳定
+  return raw
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[0-9]+\.\s*/g, '')
+    .replace(/^[*]+|[*!]+$/g, '')
+    .replace(/[📲🖥️]/g, '')
+    .replace(/^View All\s+/i, '')
+    .replace(/^A\s+(ESSENTIAL|SUMMER)\b/i, '$1')
+    .trim();
 }
 
-async function collectCategoryLinks(context: BrowserContext): Promise<string[]> {
-  const page = await context.newPage();
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-
-  // 从导航中提取所有分类/品牌链接（SearchResults 或 Category 等）
-  const hrefs = await page.$$eval('a[href]', (anchors) =>
-    anchors
-      .map((a) => (a as HTMLAnchorElement).getAttribute('href') || '')
-      .filter(Boolean),
-  );
-
-  const categoryLinks = new Set<string>();
-  for (const href of hrefs) {
-    if (
-      /SearchResults\.asp/i.test(href) ||
-      /Category\.asp/i.test(href) ||
-      /category/i.test(href)
-    ) {
-      const url = href.startsWith('http') ? href : new URL(href, BASE_URL).toString();
-      // 排除明显不是商品列表的链接
-      if (!/login|register|cart|checkout/i.test(url)) {
-        categoryLinks.add(url);
-      }
-    }
-  }
-
-  console.log(`📂 首页发现可能的分类/列表链接 ${categoryLinks.size} 条`);
-  await page.close();
-  return Array.from(categoryLinks);
+function getCookieHeaderFromSetCookie(setCookie: string[]): string {
+  return setCookie.map((cookie) => cookie.split(';')[0]).join('; ');
 }
 
-async function crawlCategoryForProducts(
-  context: BrowserContext,
-  categoryUrl: string,
+async function loginAndGetCookieHeader(): Promise<string> {
+  // Updated: 2026-03-19T23:06:40 - 直接调用 Customer_Login 接口建立可用会话，避免历史 cookie 失效
+  const email = process.env.MOBIGO_EMAIL || 'youyouanddt@hotmail.com';
+  const password = process.env.MOBIGO_PASSWORD || 'Xiaoyan@0724';
+  const payload = querystring.stringify({
+    email,
+    password,
+    Login: 'Login',
+    CalledBy: 'Register.asp',
+    CustomerNewOld: 'old',
+  });
+  const loginRes = await axios.post(`${BASE_URL}/Customer_Login.asp`, payload, {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': USER_AGENT,
+    },
+    maxRedirects: 0,
+    validateStatus: () => true,
+    timeout: 30000,
+  });
+  const setCookie = loginRes.headers['set-cookie'];
+  if (!Array.isArray(setCookie) || setCookie.length === 0) {
+    throw new Error('登录失败：未获取到会话 cookie。');
+  }
+  return getCookieHeaderFromSetCookie(setCookie);
+}
+
+async function fetchHtml(url: string, cookieHeader: string): Promise<string> {
+  const res = await axios.get(url, {
+    headers: {
+      Cookie: cookieHeader,
+      'User-Agent': USER_AGENT,
+    },
+    timeout: 30000,
+  });
+  return String(res.data);
+}
+
+function collectCategoryTargetsFromHome(homeHtml: string): CategoryTarget[] {
+  const $ = cheerio.load(homeHtml);
+  const byUrl = new Map<string, CategoryTarget>();
+
+  // Updated: 2026-03-19T23:06:40 - 从导航树提取类目链接与层级关系
+  $('nav a[href*="/category-s/"], #display_menu_s a[href*="/category-s/"]').each((_, anchor) => {
+    const href = ($(anchor).attr('href') || '').trim();
+    if (!href) return;
+    const url = href.startsWith('http') ? href : new URL(href, BASE_URL).toString();
+    if (!/\/category-s\/\d+\.htm/i.test(url)) return;
+    if (/login|register|cart|checkout/i.test(url)) return;
+
+    const path: string[] = [];
+    const parentLis = $(anchor).parents('li').toArray().reverse();
+    for (const li of parentLis) {
+      const label = normalizeCategoryLabel($(li).children('a').first().text());
+      if (label) path.push(label);
+    }
+    if (!path.length) {
+      const own = normalizeCategoryLabel($(anchor).text());
+      if (own) path.push(own);
+    }
+    if (!path.length) return;
+
+    const existing = byUrl.get(url);
+    if (!existing || path.length > existing.path.length) {
+      byUrl.set(url, { url, path });
+    }
+  });
+
+  return Array.from(byUrl.values()).sort((a, b) => a.url.localeCompare(b.url));
+}
+
+function parseCategoryId(categoryUrl: string): string | null {
+  const match = categoryUrl.match(/\/category-s\/(\d+)\.htm/i);
+  return match?.[1] || null;
+}
+
+function extractProductPathsFromSearchResults(html: string): string[] {
+  const $ = cheerio.load(html);
+  const paths = new Set<string>();
+  $('a[href*="/product-p/"]').each((_, anchor) => {
+    const href = ($(anchor).attr('href') || '').trim();
+    if (!href) return;
+    const pathname = href.startsWith('http') ? new URL(href).pathname : new URL(href, BASE_URL).pathname;
+    if (pathname.includes('/product-p/')) paths.add(pathname);
+  });
+  return Array.from(paths);
+}
+
+function extractNextPageNumber(html: string): number | null {
+  const matches = [...html.matchAll(/Add_Search_Param\('page',\s*([0-9]+)\)/gi)];
+  if (!matches.length) return null;
+  const nums = matches
+    .map((m) => Number(m[1]))
+    .filter((n) => Number.isFinite(n) && n >= 2);
+  if (!nums.length) return null;
+  return Math.max(...nums);
+}
+
+async function crawlCategoryBySearchResults(
+  cookieHeader: string,
+  target: CategoryTarget,
   productUrls: Set<string>,
-  maxPagesPerCategory = 5,
+  productCategoryPaths: Map<string, string[]>,
 ): Promise<void> {
-  const page = await context.newPage();
-  let currentUrl = categoryUrl;
+  const categoryId = parseCategoryId(target.url);
+  if (!categoryId) return;
 
-  for (let pageIndex = 0; pageIndex < maxPagesPerCategory; pageIndex += 1) {
-    console.log(`   → 分类页 ${pageIndex + 1}: ${currentUrl}`);
-    await page.goto(currentUrl, { waitUntil: 'domcontentloaded' });
-
-    // 抓取本页商品链接
-    const hrefs = await page.$$eval('a[href*="/product-p/"]', (anchors) =>
-      anchors.map((a) => (a as HTMLAnchorElement).getAttribute('href') || '').filter(Boolean),
-    );
-    for (const href of hrefs) {
-      const normalized = href.startsWith('http')
-        ? new URL(href).pathname
-        : new URL(href, BASE_URL).pathname;
-      if (normalized.includes('/product-p/')) {
-        productUrls.add(normalized);
+  let page = 1;
+  let guard = 0;
+  while (guard < 200) {
+    guard += 1;
+    const searchUrl = `${BASE_URL}/SearchResults.asp?Cat=${categoryId}&show=400&page=${page}`;
+    console.log(`   → 搜索页 page=${page}: ${searchUrl}`);
+    const html = await fetchHtml(searchUrl, cookieHeader);
+    const pageProducts = extractProductPathsFromSearchResults(html);
+    for (const productPath of pageProducts) {
+      productUrls.add(productPath);
+      const existing = productCategoryPaths.get(productPath);
+      if (!existing) {
+        productCategoryPaths.set(productPath, [...target.path]);
+      } else if (existing.join(' > ') !== target.path.join(' > ')) {
+        // Updated: 2026-03-19T23:08:55 - 多类目命中时优先保留更深层级路径，保证挂载尽量精确
+        if (target.path.length > existing.length) {
+          console.warn(
+            `⚠️ 商品命中多个类目，切换到更深路径: ${productPath}\n   from=${existing.join(
+              ' > ',
+            )}\n   to=${target.path.join(' > ')}`,
+          );
+          productCategoryPaths.set(productPath, [...target.path]);
+        } else {
+          console.warn(
+            `⚠️ 商品命中多个类目，保留现有路径: ${productPath}\n   keep=${existing.join(
+              ' > ',
+            )}\n   drop=${target.path.join(' > ')}`,
+          );
+        }
       }
     }
-    console.log(`      本页新增商品链接后累计: ${productUrls.size}`);
+    console.log(`      本页商品数: ${pageProducts.length}，累计唯一商品: ${productUrls.size}`);
 
-    // 查找“下一页”链接（Volusion 常用的分页文案）
-    const nextLink = await page
-      .$(
-        [
-          'a:has-text("Next")',
-          'a:has-text(">>")',
-          'a[rel="next"]',
-          'input[type="submit"][value*="Next" i]',
-        ].join(', '),
-      )
-      .catch(() => null);
-
-    if (!nextLink) {
-      break;
-    }
-
-    const nextHref = await nextLink.getAttribute('href');
-    if (!nextHref) break;
-    currentUrl = nextHref.startsWith('http')
-      ? nextHref
-      : new URL(nextHref, BASE_URL).toString();
+    const nextPage = extractNextPageNumber(html);
+    if (!nextPage || nextPage <= page) break;
+    page = nextPage;
   }
-
-  await page.close();
 }
 
 async function main() {
+  const cookieHeader = await loginAndGetCookieHeader();
+  const homeHtml = await fetchHtml(BASE_URL, cookieHeader);
+  const categoryTargets = collectCategoryTargetsFromHome(homeHtml);
+  console.log(`📂 首页发现导航类目链接 ${categoryTargets.length} 条`);
+
   const productUrls = new Set<string>();
-  const context = await createContextWithCookies();
+  const productCategoryPaths = new Map<string, string[]>();
 
-  try {
-    const categoryLinks = await collectCategoryLinks(context);
-
-    // 覆盖全部分类；如需限流可在此处改为 slice(N)
-    const targets = categoryLinks;
-
-    for (const url of targets) {
-      console.log(`📁 遍历分类列表: ${url}`);
-      await crawlCategoryForProducts(context, url, productUrls);
-    }
-
-    if (!productUrls.size) {
-      console.warn(
-        '⚠️ 仍未从分类页解析到 /product-p/ 链接，可能需要针对具体页面结构调整选择器。',
-      );
-    }
-
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-    const list = Array.from(productUrls).sort();
-    fs.writeFileSync(OUTPUT_PATH, JSON.stringify(list, null, 2), 'utf-8');
-    console.log(`📦 共收集商品链接 ${list.length} 条，已写入: ${OUTPUT_PATH}`);
-  } finally {
-    await context.browser()?.close();
+  for (const target of categoryTargets) {
+    console.log(`📁 遍历分类列表: ${target.path.join(' > ')} (${target.url})`);
+    await crawlCategoryBySearchResults(cookieHeader, target, productUrls, productCategoryPaths);
   }
+
+  if (!productUrls.size) {
+    throw new Error('未抓取到任何商品链接，请检查登录状态或站点结构。');
+  }
+
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  const list = Array.from(productUrls).sort();
+  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(list, null, 2), 'utf-8');
+  const categoryPathObject = Object.fromEntries(
+    Array.from(productCategoryPaths.entries()).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  fs.writeFileSync(
+    PRODUCT_CATEGORY_PATHS_OUTPUT_PATH,
+    JSON.stringify(categoryPathObject, null, 2),
+    'utf-8',
+  );
+  console.log(`📦 共收集商品链接 ${list.length} 条，已写入: ${OUTPUT_PATH}`);
+  console.log(
+    `🧭 共写入商品类目路径 ${Object.keys(categoryPathObject).length} 条，文件: ${PRODUCT_CATEGORY_PATHS_OUTPUT_PATH}`,
+  );
 }
 
 main().catch((err) => {

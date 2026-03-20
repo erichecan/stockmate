@@ -76,6 +76,8 @@ model Tenant {
   // Updated: 2026-03-17T14:30:00 - 预售限购
   preorderLimits       PreorderLimit[]
   preorderTierLimits   PreorderTierLimit[]
+  // Updated: 2026-03-19T15:02:41 - 退货工作台：退货记录
+  returnRecords        ReturnRecord[]
 
   @@map("tenants")
 }
@@ -151,6 +153,7 @@ model ActionLog {
 }
 
 // Updated: 2026-03-17T12:00:00 - 后端第三部分：新增 OPERATIONS、SALES_SUPERVISOR
+// Updated: 2026-03-20T16:30:00 - 零售商采购台 RETAIL_BUYER；网站/商品主数据维护 CATALOG_ADMIN（PRD A/B 端分工）
 enum UserRole {
   SUPER_ADMIN
   ADMIN
@@ -159,8 +162,14 @@ enum UserRole {
   SALES
   SALES_SUPERVISOR
   OPERATIONS
+  // Updated: 2026-03-19T15:02:41 - 退货专员角色
+  RETURN_SPECIALIST
+  // Updated: 2026-03-19T15:02:41 - 仓库拣货员角色
+  PICKER
   FINANCE
   VIEWER
+  RETAIL_BUYER
+  CATALOG_ADMIN
 }
 
 // ============================================================
@@ -287,6 +296,8 @@ model Sku {
   // Updated: 2026-03-17T14:30:00 - 预售限购
   preorderLimits       PreorderLimit[]
   preorderTierLimits   PreorderTierLimit[]
+  // Updated: 2026-03-19T15:02:41 - 退货工作台：退货 SKU
+  returnRecords        ReturnRecord[]
 
   @@unique([code, tenantId])
   @@index([productId])
@@ -816,6 +827,8 @@ model SalesOrder {
   // Updated: 2026-03-16T22:06:00 - PRD 新增关联
   backorderItems BackorderItem[]
   invoices       Invoice[]
+  // Updated: 2026-03-19T15:02:41 - 退货工作台：退货单与来源订单关联
+  returnRecords  ReturnRecord[]
 
   @@unique([orderNumber, tenantId])
   @@index([tenantId])
@@ -999,6 +1012,8 @@ model PaymentRecord {
 
 enum PaymentMethod {
   CASH
+  // Updated: 2026-03-20T11:30:41 - 新增借记卡收款方式
+  DEBIT_CARD
   BANK_TRANSFER
   CHECK
   CREDIT_CARD
@@ -1361,4 +1376,64 @@ model CashbookTransaction {
 enum CashbookTransactionType {
   IN
   OUT
+}
+
+// ============================================================
+// 退货工作台 (2026-03-19T15:02:41)
+// ============================================================
+
+enum ReturnStatus {
+  RECEIVED
+  MATCHED
+  DECIDED
+  PROCESSED
+}
+
+enum ReturnCondition {
+  UNKNOWN
+  NEW_LIKE
+  GOOD
+  DAMAGED
+  BROKEN
+}
+
+enum ReturnDisposition {
+  PENDING
+  DISCARD
+  REPAIR
+  DISCOUNT_SALE
+  RETAIL
+}
+
+model ReturnRecord {
+  id                String            @id @default(uuid())
+  tenantId          String            @map("tenant_id")
+  sourceOrderId     String?           @map("source_order_id")
+  sourceOrderNumber String?           @map("source_order_number")
+  skuId             String?           @map("sku_id")
+  returnedQty       Int               @default(1) @map("returned_qty")
+  status            ReturnStatus      @default(RECEIVED)
+  condition         ReturnCondition   @default(UNKNOWN)
+  disposition       ReturnDisposition @default(PENDING)
+  issueDescription  String?           @map("issue_description")
+  intakeNotes       String?           @map("intake_notes")
+  decisionNotes     String?           @map("decision_notes")
+  receivedByUserId  String?           @map("received_by_user_id")
+  decidedByUserId   String?           @map("decided_by_user_id")
+  decidedAt         DateTime?         @map("decided_at")
+  processedAt       DateTime?         @map("processed_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sourceOrder SalesOrder? @relation(fields: [sourceOrderId], references: [id])
+  sku         Sku?        @relation(fields: [skuId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, disposition])
+  @@index([sourceOrderId])
+  @@index([skuId])
+  @@index([createdAt])
+  @@map("return_records")
 }

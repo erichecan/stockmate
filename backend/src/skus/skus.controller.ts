@@ -1,5 +1,6 @@
 // Updated: 2026-02-27T04:30:00
 // Updated: 2026-03-17T14:31:00 - SKU MOQ PATCH endpoints
+// Updated: 2026-03-20T16:35:00 - 写操作限制为商品维护岗位（含 CATALOG_ADMIN）
 import {
   Body,
   Controller,
@@ -9,6 +10,7 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -24,6 +26,9 @@ import { BatchUpdateSkuMoqDto } from './dto/batch-update-sku-moq.dto';
 import { BulkCreateSkuDto } from './dto/bulk-create-sku.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { CATALOG_MAINTENANCE_ROLES } from '../common/constants/catalog-maintenance-roles';
 
 @ApiTags('SKUs')
 @ApiBearerAuth()
@@ -32,6 +37,8 @@ export class SkusController {
   constructor(private skusService: SkusService) {}
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(...CATALOG_MAINTENANCE_ROLES)
   @ApiOperation({ summary: 'Create a single SKU' })
   @ApiResponse({ status: 201, description: 'SKU created' })
   async create(
@@ -42,6 +49,8 @@ export class SkusController {
   }
 
   @Post('bulk')
+  @UseGuards(RolesGuard)
+  @Roles(...CATALOG_MAINTENANCE_ROLES)
   @ApiOperation({ summary: 'Bulk create SKUs from variant combinations' })
   @ApiResponse({ status: 201, description: 'SKUs created' })
   async bulkCreate(
@@ -63,6 +72,8 @@ export class SkusController {
   }
 
   @Patch('moq/batch')
+  @UseGuards(RolesGuard)
+  @Roles(...CATALOG_MAINTENANCE_ROLES)
   @ApiOperation({ summary: 'Batch update SKU MOQ' })
   @ApiResponse({ status: 200, description: 'SKUs updated' })
   async batchUpdateMoq(
@@ -94,6 +105,8 @@ export class SkusController {
   }
 
   @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(...CATALOG_MAINTENANCE_ROLES)
   @ApiOperation({ summary: 'Update SKU' })
   @ApiResponse({ status: 200, description: 'SKU updated' })
   async update(
@@ -105,6 +118,8 @@ export class SkusController {
   }
 
   @Patch(':id/moq')
+  @UseGuards(RolesGuard)
+  @Roles(...CATALOG_MAINTENANCE_ROLES)
   @ApiOperation({ summary: 'Update SKU MOQ' })
   @ApiResponse({ status: 200, description: 'SKU MOQ updated' })
   async updateMoq(
@@ -116,6 +131,8 @@ export class SkusController {
   }
 
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(...CATALOG_MAINTENANCE_ROLES)
   @ApiOperation({ summary: 'Deactivate SKU (soft delete)' })
   @ApiResponse({ status: 200, description: 'SKU deactivated' })
   async remove(

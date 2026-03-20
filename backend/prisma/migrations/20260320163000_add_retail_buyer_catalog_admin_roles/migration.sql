@@ -1,0 +1,3 @@
+-- 2026-03-20T16:30:00 - 零售商采购 RETAIL_BUYER、网站商品管理 CATALOG_ADMIN（见 docs/prd-b2b-digital-operations-system.md A/B 端）
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'RETAIL_BUYER';
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'CATALOG_ADMIN';

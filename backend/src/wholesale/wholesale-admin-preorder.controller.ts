@@ -1,4 +1,5 @@
 // Updated: 2026-03-17T14:30:00 - Admin 预售限购：PUT/GET /wholesale/admin/preorder/limits/:skuId
+// Updated: 2026-03-19T12:00:00 - 批发网站主管（SALES_SUPERVISOR）可管理预售限购
 import {
   Controller,
   Get,
@@ -20,7 +21,12 @@ import { PutPreorderLimitsDto } from './dto/preorder-limits.dto';
 @ApiBearerAuth()
 @Controller('wholesale/admin/preorder/limits')
 @UseGuards(RolesGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+@Roles(
+  UserRole.SUPER_ADMIN,
+  UserRole.ADMIN,
+  UserRole.SALES_SUPERVISOR,
+  UserRole.CATALOG_ADMIN,
+)
 export class WholesaleAdminPreorderController {
   constructor(private readonly prisma: PrismaService) {}
 

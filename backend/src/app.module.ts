@@ -29,6 +29,9 @@ import { PricingModule } from './pricing/pricing.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CashbookModule } from './cashbook/cashbook.module';
 import { WmsWavesModule } from './wms-waves/wms-waves.module';
+import { ReturnsModule } from './returns/returns.module';
+import { AdminAnalyticsModule } from './admin-analytics/admin-analytics.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -63,6 +66,12 @@ import { WmsWavesModule } from './wms-waves/wms-waves.module';
     NotificationsModule,
     CashbookModule,
     WmsWavesModule,
+    // Updated: 2026-03-19T15:11:56 - 退货工作台模块
+    ReturnsModule,
+    // Updated: 2026-03-20T10:43:26 - 老板经营分析模块
+    AdminAnalyticsModule,
+    // Updated: 2026-03-20T11:40:52 - 收款登记模块
+    PaymentsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

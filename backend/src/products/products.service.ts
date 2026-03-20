@@ -1,4 +1,5 @@
 // Updated: 2026-02-27T04:30:00
+// Updated: 2026-03-20T20:18:00 - 列表按名称/英文名模糊搜索（管理端快速定位）
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -29,13 +30,25 @@ export class ProductsService {
     });
   }
 
-  async findAll(tenantId: string, pagination: PaginationDto) {
+  async findAll(tenantId: string, pagination: PaginationDto, search?: string) {
     const { page, limit } = pagination;
     const skip = (page - 1) * limit;
+    const q = search?.trim();
+    const where = {
+      tenantId,
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' as const } },
+              { nameEn: { contains: q, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
 
     const [data, total] = await Promise.all([
       this.prisma.product.findMany({
-        where: { tenantId },
+        where,
         skip,
         take: limit,
         include: {
@@ -45,7 +58,7 @@ export class ProductsService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.product.count({ where: { tenantId } }),
+      this.prisma.product.count({ where }),
     ]);
 
     return new PaginatedResponseDto(data, total, page, limit);

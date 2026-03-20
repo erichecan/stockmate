@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   CustomerTier,
+  InvoiceStatus,
   OrderSource,
   Prisma,
   SOStatus,
@@ -33,6 +34,24 @@ const SO_INCLUDE = {
   warehouse: true,
   items: { include: { sku: { include: { product: true } } } },
 } as const;
+
+/** 订单处理岗「待处理」队列（可打单/生成波次） */
+const ORDER_PIPELINE_STATUSES: SOStatus[] = [
+  SOStatus.PENDING,
+  SOStatus.CONFIRMED,
+  SOStatus.PICKING,
+  SOStatus.PACKED,
+];
+
+/** 视为已进入处理/履约链路（用于「今日已处理」粗算） */
+const ORDER_PROCESSED_STATUSES: SOStatus[] = [
+  SOStatus.CONFIRMED,
+  SOStatus.PICKING,
+  SOStatus.PACKED,
+  SOStatus.SHIPPED,
+  SOStatus.PARTIALLY_FULFILLED,
+  SOStatus.COMPLETED,
+];
 
 @Injectable()
 export class SalesOrdersService {
@@ -174,13 +193,87 @@ export class SalesOrdersService {
     );
   }
 
+  /** 订单处理看板 KPI（自然日按 UTC 边界，与列表分页配合） */
+  // Updated: 2026-03-20T07:27:38-0400
+  async getProcessingDashboardStats(tenantId: string) {
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth();
+    const d = now.getUTCDate();
+    const todayStart = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
+    const yesterday = new Date(Date.UTC(y, m, d - 1, 0, 0, 0, 0));
+    const yesterdayEnd = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
+
+    const unpaidInvoiceStatuses: InvoiceStatus[] = [
+      InvoiceStatus.UNPAID,
+      InvoiceStatus.PARTIALLY_PAID,
+      InvoiceStatus.OVERDUE,
+    ];
+
+    const [
+      processedTodayCount,
+      todayTotalOrdersCount,
+      yesterdayTotalOrdersCount,
+      pendingPipelineCount,
+      unpaidFailedCount,
+    ] = await Promise.all([
+      this.prisma.salesOrder.count({
+        where: {
+          tenantId,
+          updatedAt: { gte: todayStart, lte: now },
+          status: { in: ORDER_PROCESSED_STATUSES },
+        },
+      }),
+      this.prisma.salesOrder.count({
+        where: {
+          tenantId,
+          createdAt: { gte: todayStart, lte: now },
+          status: { not: SOStatus.CANCELLED },
+        },
+      }),
+      this.prisma.salesOrder.count({
+        where: {
+          tenantId,
+          createdAt: { gte: yesterday, lt: yesterdayEnd },
+          status: { not: SOStatus.CANCELLED },
+        },
+      }),
+      this.prisma.salesOrder.count({
+        where: { tenantId, status: { in: ORDER_PIPELINE_STATUSES } },
+      }),
+      this.prisma.salesOrder.count({
+        where: {
+          tenantId,
+          OR: [
+            { status: SOStatus.DRAFT },
+            {
+              invoices: {
+                some: { status: { in: unpaidInvoiceStatuses } },
+              },
+            },
+          ],
+        },
+      }),
+    ]);
+
+    return {
+      processedTodayCount,
+      todayTotalOrdersCount,
+      yesterdayTotalOrdersCount,
+      pendingPipelineCount,
+      unpaidFailedCount,
+    };
+  }
+
   async findAll(
     tenantId: string,
     query: {
       status?: SOStatus;
+      statusIn?: SOStatus[];
       customerId?: string;
       page?: number;
       limit?: number;
+      unpaidIssue?: boolean;
     },
   ) {
     const page = query.page ?? 1;
@@ -188,8 +281,30 @@ export class SalesOrdersService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.SalesOrderWhereInput = { tenantId };
-    if (query.status) where.status = query.status;
     if (query.customerId) where.customerId = query.customerId;
+
+    if (query.unpaidIssue) {
+      where.OR = [
+        { status: SOStatus.DRAFT },
+        {
+          invoices: {
+            some: {
+              status: {
+                in: [
+                  InvoiceStatus.UNPAID,
+                  InvoiceStatus.PARTIALLY_PAID,
+                  InvoiceStatus.OVERDUE,
+                ],
+              },
+            },
+          },
+        },
+      ];
+    } else if (query.statusIn?.length) {
+      where.status = { in: query.statusIn };
+    } else if (query.status) {
+      where.status = query.status;
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.salesOrder.findMany({

@@ -38,6 +38,8 @@ export class WmsWavesService {
       UserRole.ADMIN,
       UserRole.OPERATIONS,
       UserRole.WAREHOUSE,
+      // Updated: 2026-03-19T15:14:57 - 仓库拣货员也需要接收波次作业通知
+      UserRole.PICKER,
     ];
     const targets = await this.prisma.user.findMany({
       where: {
@@ -77,9 +79,9 @@ export class WmsWavesService {
 
   // Updated: 2026-03-18T23:26:35 - 创建正式波次实体
   async createWave(tenantId: string, dto: CreateWaveDto) {
-    const orderIds = Array.from(new Set(dto.orderIds.map((id) => id.trim()))).filter(
-      Boolean,
-    );
+    const orderIds = Array.from(
+      new Set(dto.orderIds.map((id) => id.trim())),
+    ).filter(Boolean);
     if (!orderIds.length) {
       throw new BadRequestException('orderIds is required');
     }
@@ -109,7 +111,9 @@ export class WmsWavesService {
 
     const warehouseIds = Array.from(new Set(orders.map((o) => o.warehouseId)));
     if (dto.warehouseId && !warehouseIds.includes(dto.warehouseId)) {
-      throw new BadRequestException('warehouseId does not match selected orders');
+      throw new BadRequestException(
+        'warehouseId does not match selected orders',
+      );
     }
     if (!dto.warehouseId && warehouseIds.length > 1) {
       throw new BadRequestException(
@@ -212,6 +216,44 @@ export class WmsWavesService {
     return this.getWaveById(tenantId, wave.id);
   }
 
+  /** 仓库拣货看板顶部 KPI（待处理订单 / 待处理波次 / 待处理波次内缺货行数） */
+  // Updated: 2026-03-20T07:20:45-0400
+  async getPickingDashboardSummary(tenantId: string) {
+    const [pendingOrdersCount, pendingWavesCount, shortageItemsCount] =
+      await Promise.all([
+        this.prisma.salesOrder.count({
+          where: {
+            tenantId,
+            status: { in: WAVE_ELIGIBLE_ORDER_STATUS },
+          },
+        }),
+        this.prisma.pickWave.count({
+          where: {
+            tenantId,
+            status: {
+              in: [PickWaveStatus.PENDING, PickWaveStatus.IN_PROGRESS],
+            },
+          },
+        }),
+        this.prisma.pickWaveItem.count({
+          where: {
+            binLocationId: null,
+            pickWave: {
+              tenantId,
+              status: {
+                in: [PickWaveStatus.PENDING, PickWaveStatus.IN_PROGRESS],
+              },
+            },
+          },
+        }),
+      ]);
+    return {
+      pendingOrdersCount,
+      pendingWavesCount,
+      shortageItemsCount,
+    };
+  }
+
   // Updated: 2026-03-18T23:27:20 - 波次列表
   async listWaves(
     tenantId: string,
@@ -269,8 +311,10 @@ export class WmsWavesService {
       where: { id },
       data: {
         status,
-        startedAt: status === PickWaveStatus.IN_PROGRESS ? new Date() : undefined,
-        completedAt: status === PickWaveStatus.COMPLETED ? new Date() : undefined,
+        startedAt:
+          status === PickWaveStatus.IN_PROGRESS ? new Date() : undefined,
+        completedAt:
+          status === PickWaveStatus.COMPLETED ? new Date() : undefined,
       },
     });
     await this.notifyWaveRoles(tenantId, {
@@ -323,7 +367,10 @@ export class WmsWavesService {
       const old = merged.get(key);
       if (old) {
         old.totalQty += item.requiredQty;
-        old.orderBreakdown.push({ orderId: item.salesOrderId, qty: item.requiredQty });
+        old.orderBreakdown.push({
+          orderId: item.salesOrderId,
+          qty: item.requiredQty,
+        });
         old.shortage = old.shortage || shortage;
       } else {
         merged.set(key, {
@@ -332,7 +379,9 @@ export class WmsWavesService {
           skuName,
           totalQty: item.requiredQty,
           shortage,
-          orderBreakdown: [{ orderId: item.salesOrderId, qty: item.requiredQty }],
+          orderBreakdown: [
+            { orderId: item.salesOrderId, qty: item.requiredQty },
+          ],
         });
       }
     }
@@ -349,4 +398,3 @@ export class WmsWavesService {
     };
   }
 }
-
